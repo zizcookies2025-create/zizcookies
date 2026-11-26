@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>شرح تثبيت تطبيق زيزكوكيز</title>
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#f2f4f3;--surface:#fff;--ink:#17211f;--muted:#5b6966;--line:#dbe2e0;--pri:#0f6b55;--gold:#c79a2b;--blue:#0a84ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;min-height:100vh}
+header{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+header img{width:40px;height:40px;border-radius:10px}
+header h1{font-size:1.1rem;margin:0}
+main{max-width:520px;margin:0 auto;padding:14px 14px 30px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font:inherit;font-weight:600;color:var(--ink);cursor:pointer}
+.tabs button[aria-pressed=true]{background:var(--pri);color:#fff;border-color:var(--pri)}
+.stage{display:grid;place-items:center}
+.phone{position:relative;width:250px;height:500px;border-radius:38px;background:#111;padding:10px;box-shadow:0 12px 30px rgba(0,0,0,.18)}
+.screen{position:relative;width:100%;height:100%;border-radius:30px;overflow:hidden;background:#fff}
+.notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:80px;height:20px;border-radius:12px;background:#111;z-index:9}
+.scene{position:absolute;inset:0;opacity:0;transition:opacity .45s}
+.scene.on{opacity:1}
+/* home screen */
+.home{background:linear-gradient(160deg,#3a6b8f,#8a5f9e);padding:44px 16px 0;display:grid;grid-template-columns:repeat(4,1fr);gap:16px 8px;align-content:start}
+.app{display:flex;flex-direction:column;align-items:center;gap:4px;color:#fff;font-size:9px}
+.ico{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;font-size:22px;background:rgba(255,255,255,.25)}
+.ico.safari{background:#fff}
+.ico.chrome{background:#fff}
+.ico.ziz{background:#fff;overflow:hidden}
+.ico.ziz img{width:100%;height:100%}
+.dock{position:absolute;bottom:12px;left:10px;right:10px;height:64px;border-radius:22px;background:rgba(255,255,255,.3);display:flex;justify-content:space-around;align-items:center}
+/* browser */
+.web{background:#f4f4f4;display:flex;flex-direction:column}
+.webtop{padding:36px 10px 8px;background:#f7f7f7}
+.page{flex:1;background:#fff;padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.page img{width:54px;height:54px;border-radius:12px}
+.page .t{font-weight:700;font-size:13px}
+.line{height:8px;border-radius:4px;background:#e6ebe9;width:80%}
+.line.s{width:55%}
+.bar{background:#e9e9ec;border-radius:12px;padding:8px 10px;font-size:10px;color:#333;display:flex;align-items:center;gap:6px;direction:ltr;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar.bottom{margin:8px 10px 10px}
+.toolbar{display:flex;justify-content:space-around;align-items:center;padding:8px 6px 16px;background:#f7f7f7;font-size:18px;color:var(--blue)}
+.kbd{position:absolute;bottom:0;left:0;right:0;height:120px;background:#d1d4d9;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;padding:8px 4px}
+.kbd i{background:#fff;border-radius:4px}
+.go{position:absolute;bottom:8px;right:8px;background:var(--blue);color:#fff;font-size:11px;border-radius:6px;padding:8px 14px;z-index:2}
+/* sheet */
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.3)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#f2f2f7;border-radius:16px 16px 0 0;padding:12px 10px 18px;font-size:11px}
+.sheet .row{background:#fff;padding:10px;border-bottom:1px solid #e5e5ea;display:flex;justify-content:space-between;align-items:center}
+.sheet .row:first-of-type{border-radius:10px 10px 0 0}
+.sheet .row:last-of-type{border-radius:0 0 10px 10px;border-bottom:0}
+.sheet .hl{background:#fff7d6}
+.menu{position:absolute;top:70px;left:10px;width:170px;background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:11px;overflow:hidden}
+.menu div{padding:10px;border-bottom:1px solid #eee}
+.menu .hl{background:#fff7d6;font-weight:700}
+.dialog{position:absolute;left:14px;right:14px;top:150px;background:#fff;border-radius:14px;padding:14px;font-size:11px;box-shadow:0 8px 24px rgba(0,0,0,.25);text-align:center}
+.dialog .btns{display:flex;justify-content:space-between;margin-top:12px;color:var(--blue);font-weight:700}
+.addtop{position:absolute;top:0;left:0;right:0;padding:34px 12px 10px;background:#f7f7f7;display:flex;justify-content:space-between;font-size:11px;color:var(--blue);font-weight:700;border-bottom:1px solid #ddd}
+.addbody{position:absolute;top:70px;left:10px;right:10px;background:#fff;border-radius:10px;padding:10px;display:flex;gap:10px;align-items:center;font-size:11px}
+.addbody img{width:44px;height:44px;border-radius:10px}
+/* finger */
+.tap{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:rgba(255,196,0,.55);border:3px solid #ffc400;z-index:20;opacity:0;pointer-events:none}
+.tap.on{animation:tap 1.4s ease-in-out infinite}
+@keyframes tap{0%{opacity:0;transform:scale(1.6)}30%{opacity:1;transform:scale(1)}60%{opacity:1;transform:scale(.8)}100%{opacity:0;transform:scale(1)}}
+.cap{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;min-height:92px}
+.cap .n{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--pri);color:#fff;font-weight:700;margin-inline-end:8px}
+.cap b{font-size:1.05rem}
+.cap p{margin:8px 0 0;color:var(--muted);line-height:1.7}
+.prog{display:flex;gap:4px;margin-top:12px}
+.prog i{flex:1;height:5px;border-radius:3px;background:var(--line);overflow:hidden;position:relative}
+.prog i.done{background:var(--pri)}
+.prog i.cur::after{content:"";position:absolute;inset:0;background:var(--pri);transform-origin:right;animation:fill var(--dur) linear forwards}
+.paused .prog i.cur::after{animation-play-state:paused}
+@keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.ctrl{display:flex;gap:8px;margin-top:12px}
+.ctrl button{flex:1;padding:11px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font:inherit;font-weight:600;color:var(--ink);cursor:pointer}
+.ctrl .pri{background:var(--pri);color:#fff;border-color:var(--pri)}
+.note{margin-top:14px;font-size:.9rem;color:var(--muted);line-height:1.8;background:#fbf3e4;border-radius:12px;padding:10px 12px}
+.back{display:block;text-align:center;margin-top:14px;color:var(--pri);font-weight:700}
+</style>
+</head>
+<body>
+<header><img src="icon-192.png" alt=""><h1>شرح تثبيت تطبيق زيزكوكيز على الجوال</h1></header>
+<main id="m">
+  <div class="tabs"><button id="tIos" aria-pressed="true">آيفون</button><button id="tAnd" aria-pressed="false">أندرويد</button></div>
+  <div class="stage"><div class="phone"><div class="screen" id="screen"><div class="notch"></div></div></div></div>
+  <div class="cap" id="cap"></div>
+  <div class="prog" id="prog"></div>
+  <div class="ctrl"><button id="prev">السابق</button><button id="play" class="pri">إيقاف</button><button id="next">التالي</button></div>
+  <div class="note" id="note"></div>
+  <a class="back" href="./">رجوع للتطبيق</a>
+</main>
+<script>
+const URL_TXT='zizcookies2025-create.github.io/zizcookies';
+const web=(bottom,extra='')=>`<div class="scene web">${bottom?'':`<div class="webtop"><div class="bar">🔒 ${URL_TXT}</div></div>`}
+  <div class="page"><img src="icon-192.png" alt=""><div class="t">دفتر الإنتاج اليومي</div><div class="line"></div><div class="line s"></div><div class="line"></div><div class="line s"></div></div>
+  ${bottom?`<div class="bar bottom">🔒 ${URL_TXT}</div><div class="toolbar"><span>‹</span><span>›</span><span>⬆️</span><span>📖</span><span>⋯</span></div>`:''}${extra}</div>`;
+const home=(withZiz,browser)=>`<div class="scene home">
+  <div class="app"><div class="ico">📷</div>الكاميرا</div><div class="app"><div class="ico">🗓️</div>التقويم</div><div class="app"><div class="ico">⚙️</div>الإعدادات</div><div class="app"><div class="ico">🖼️</div>الصور</div>
+  <div class="app"><div class="ico">🗺️</div>الخرائط</div><div class="app"><div class="ico">🌤️</div>الطقس</div><div class="app"><div class="ico">📝</div>الملاحظات</div>
+  ${withZiz?'<div class="app"><div class="ico ziz"><img src="icon-192.png" alt=""></div>زيزكوكيز</div>':''}
+  <div class="dock"><div class="ico">📞</div><div class="ico">💬</div><div class="ico ${browser}">${browser==='safari'?'🧭':'🌐'}</div><div class="ico">🎵</div></div></div>`;
+const kbd='<div class="kbd">'+'<i></i>'.repeat(30)+'</div><div class="go">انتقال</div>';
+const FLOWS={
+ ios:{note:'مهم: لازم Safari بالذات. إذا فتحت الرابط من واتساب أو من متصفح ثاني ما يطلع خيار "إضافة إلى الشاشة الرئيسية". في التطبيق اضغط "نسخ رابط التطبيق" ثم الصقه في Safari.',steps:[
+  {t:'افتح متصفح Safari',p:'من شاشة الجوال اضغط أيقونة Safari، البوصلة الزرقاء.',s:home(false,'safari'),x:[157,445]},
+  {t:'الصق رابط التطبيق',p:'اضغط شريط العنوان، الصق الرابط، واضغط "انتقال".',s:web(true,kbd),x:[205,462]},
+  {t:'اضغط زر المشاركة',p:'الزر اللي فيه مربع وسهم ⬆️ تحت. إذا ما شفته اضغط "⋯" ثم "مشاركة".',s:web(true),x:[123,462]},
+  {t:'اختر "إضافة إلى الشاشة الرئيسية"',p:'انزل في القائمة شوي. أحيانًا يكون تحت "عرض المزيد".',s:web(true,`<div class="dim"></div><div class="sheet"><div class="row">نسخ <span>📄</span></div><div class="row">إضافة إلى قائمة القراءة <span>👓</span></div><div class="row">إضافة إشارة مرجعية <span>📖</span></div><div class="row hl"><b>إضافة إلى الشاشة الرئيسية</b> <span>➕</span></div></div>`),x:[115,440]},
+  {t:'اضغط "إضافة"',p:'فوق على اليمين. تقدر تخلي الاسم زي ما هو.',s:`<div class="scene web" style="background:#f2f2f7"><div class="addtop"><span>إلغاء</span><span style="color:#000">إضافة إلى الشاشة</span><span>إضافة</span></div><div class="addbody"><img src="icon-192.png" alt=""><div><b>زيزكوكيز</b><br><span style="color:#888;direction:ltr;display:inline-block">${URL_TXT}</span></div></div></div>`,x:[205,48]},
+  {t:'تم! افتح التطبيق من الأيقونة',p:'تطلع أيقونة زيزكوكيز على شاشة جوالك. افتحها من هنا دايمًا وسجّل دخولك برقم جوالك.',s:home(true,'safari'),x:[205,150]}]},
+ and:{note:'مهم: استخدم Chrome. إذا فتحت الرابط من واتساب، اضغط ⋮ فوق واختر "فتح في Chrome" أو انسخ الرابط والصقه في Chrome.',steps:[
+  {t:'افتح متصفح Chrome',p:'من شاشة الجوال اضغط أيقونة Chrome.',s:home(false,'chrome'),x:[157,445]},
+  {t:'الصق رابط التطبيق',p:'اضغط شريط العنوان فوق، الصق الرابط، واضغط "انتقال".',s:web(false,kbd),x:[205,462]},
+  {t:'اضغط ⋮ فوق',p:'النقاط الثلاث بجنب شريط العنوان.',s:web(false,'<div style="position:absolute;top:38px;left:8px;font-size:18px;font-weight:700">⋮</div>'),x:[14,48]},
+  {t:'اختر "تثبيت التطبيق"',p:'أو "إضافة إلى الشاشة الرئيسية" حسب جوالك.',s:web(false,'<div class="menu"><div>علامة تبويب جديدة</div><div>السجل</div><div>مشاركة</div><div class="hl">تثبيت التطبيق</div><div>الإعدادات</div></div>'),x:[95,188]},
+  {t:'اضغط "تثبيت"',p:'تطلع رسالة تأكيد، اضغط تثبيت.',s:web(false,'<div class="dim"></div><div class="dialog"><img src="icon-192.png" alt="" style="width:44px;border-radius:10px"><br><b>تثبيت التطبيق؟</b><br>زيزكوكيز<div class="btns"><span>تثبيت</span><span style="color:#888">إلغاء</span></div></div>'),x:[55,245]},
+  {t:'تم! افتح التطبيق من الأيقونة',p:'تطلع أيقونة زيزكوكيز على شاشة جوالك. افتحها من هنا دايمًا وسجّل دخولك برقم جوالك.',s:home(true,'chrome'),x:[205,150]}]}
+};
+const DUR=4200;let flow=/android/i.test(navigator.userAgent)?'and':'ios',i=0,timer=null,playing=true;
+const $=s=>document.querySelector(s);
+function render(){
+  const F=FLOWS[flow],st=F.steps[i];
+  $('#tIos').setAttribute('aria-pressed',flow==='ios');$('#tAnd').setAttribute('aria-pressed',flow==='and');
+  $('#screen').innerHTML='<div class="notch"></div>'+st.s+`<div class="tap" style="left:${st.x[0]}px;top:${st.x[1]}px"></div>`;
+  requestAnimationFrame(()=>{$('#screen .scene').classList.add('on');$('#screen .tap').classList.add('on')});
+  $('#cap').innerHTML=`<span class="n">${i+1}</span><b>${st.t}</b><p>${st.p}</p>`;
+  $('#prog').style.setProperty('--dur',DUR+'ms');
+  $('#prog').innerHTML=F.steps.map((_,k)=>`<i class="${k<i?'done':k===i?'cur':''}"></i>`).join('');
+  $('#note').textContent=F.note;
+  clearTimeout(timer);if(playing)timer=setTimeout(()=>{i=(i+1)%F.steps.length;render()},DUR);
+}
+function go(d){const n=FLOWS[flow].steps.length;i=(i+d+n)%n;render()}
+$('#next').onclick=()=>go(1);$('#prev').onclick=()=>go(-1);
+$('#play').onclick=()=>{playing=!playing;$('#play').textContent=playing?'إيقاف':'تشغيل';$('#m').classList.toggle('paused',!playing);render()};
+$('#tIos').onclick=()=>{flow='ios';i=0;render()};$('#tAnd').onclick=()=>{flow='and';i=0;render()};
+render();
+</script>
+</body>
+</html>
