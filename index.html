@@ -251,7 +251,7 @@ function byUser(s,r,c){const U={};const g=u=>U[u]=U[u]||{u,sv:0,rv:0,sn:0,rn:0,c
   c.forEach(x=>{g(x.user||'').cv+=num(x.amount)});
   new Set(s.map(x=>(x.user||'')+'|'+x.invoice)).forEach(k=>{g(k.split('|')[0]).n++});
   return Object.values(U).filter(x=>x.sv||x.rv||x.cv||x.n).sort((a,b)=>(b.sv-b.rv)-(a.sv-a.rv))}
-function userTable(rows){const S2=f=>fmt(rows.reduce((a,x)=>a+f(x),0));return tbl('<th>المستخدم</th><th class="n">فواتير</th><th class="n">المبيعات شامل الضريبة</th><th class="n">المرتجعات شامل الضريبة</th><th class="n">الصافي شامل الضريبة</th><th class="n">الصافي بدون الضريبة</th><th class="n">التحصيلات</th>',rows.map(x=>`<tr><td>${esc(userName(x.u))}</td><td class="n">${fmt(x.n)}</td><td class="n">${fmt(x.sv)}</td><td class="n">${fmt(x.rv)}</td><td class="n">${fmt(x.sv-x.rv)}</td><td class="n">${fmt(x.sn-x.rn)}</td><td class="n">${fmt(x.cv)}</td></tr>`),rows.length?`<td>الإجمالي</td><td class="n">${S2(x=>x.n)}</td><td class="n">${S2(x=>x.sv)}</td><td class="n">${S2(x=>x.rv)}</td><td class="n">${S2(x=>x.sv-x.rv)}</td><td class="n">${S2(x=>x.sn-x.rn)}</td><td class="n">${S2(x=>x.cv)}</td>`:'','لا توجد حركة.')}
+function userTable(rows){const S2=f=>fmt(rows.reduce((a,x)=>a+f(x),0));return tbl('<th>المستخدم</th><th class="n">فواتير</th><th class="n">المبيعات شامل الضريبة</th><th class="n">المرتجعات شامل الضريبة</th><th class="n">الصافي شامل الضريبة</th><th class="n">الصافي بدون الضريبة</th><th class="n">التحصيلات</th><th class="n">نسبة التحصيل</th>',rows.map(x=>`<tr><td>${esc(userName(x.u))}</td><td class="n">${fmt(x.n)}</td><td class="n">${fmt(x.sv)}</td><td class="n">${fmt(x.rv)}</td><td class="n">${fmt(x.sv-x.rv)}</td><td class="n">${fmt(x.sn-x.rn)}</td><td class="n">${fmt(x.cv)}</td><td class="n">${ratioCell(x.cv,x.sv-x.rv)}</td></tr>`),rows.length?`<td>الإجمالي</td><td class="n">${S2(x=>x.n)}</td><td class="n">${S2(x=>x.sv)}</td><td class="n">${S2(x=>x.rv)}</td><td class="n">${S2(x=>x.sv-x.rv)}</td><td class="n">${S2(x=>x.sn-x.rn)}</td><td class="n">${S2(x=>x.cv)}</td><td class="n">${ratioCell(rows.reduce((a,x)=>a+x.cv,0),rows.reduce((a,x)=>a+x.sv-x.rv,0))}</td>`:'','لا توجد حركة.')}
 const pName=id=>{const p=byId('products',id);return p?p.name:(NAMES[id]||'صنف محذوف')};
 const KIND={raw:'مادة خام',aux:'مادة مساعدة'};
 /* all amounts in the system include 15% VAT; prices imported from Daftra were stored before VAT */
@@ -621,43 +621,73 @@ const kg=g=>fmt(+(g/1000).toFixed(3));
 const monthKey=()=>day.slice(0,7);
 const targetsDoc=()=>S.targets.find(x=>x.id==='t-'+monthKey())||null;
 function repIds(){const m=S.meta.find(x=>x.id==='users');let ids=m&&m.users?Object.keys(m.users).filter(k=>k!=='0'):[];if(myRole()==='rep')ids=ids.filter(k=>k===String((MYPROFILE&&MYPROFILE.rep)||''));return ids}
+/* working week: 6 days, Friday off */
+const isWorkDay=iso=>new Date(iso+'T12:00:00').getDay()!==5;
 function targetStats(){
   const mk=monthKey(),days=monthDays(day),f=days[0],to=days[days.length-1],t=todayISO();
-  const totalDays=days.length,elapsed=mk<t.slice(0,7)?totalDays:mk>t.slice(0,7)?0:+t.slice(8),left=Math.max(0,totalDays-elapsed);
+  const work=days.filter(isWorkDay),totalDays=work.length;
+  const elapsed=mk<t.slice(0,7)?totalDays:mk>t.slice(0,7)?0:work.filter(d=>d<=t).length,left=Math.max(0,totalDays-elapsed);
   const s=inRange('sales',f,to),r=inRange('returns',f,to),c=inRange('collections',f,to),T=targetsDoc()||{};
-  return {mk,totalDays,elapsed,left,rows:repIds().map(id=>{const mine=x=>String(x.user||'')===id;
+  return {mk,days,work,totalDays,elapsed,left,s,r,c,T,rows:repIds().map(id=>{const mine=x=>String(x.user||'')===id;
     const net=s.filter(mine).reduce((a,x)=>a+gval(x),0)-r.filter(mine).reduce((a,x)=>a+gval(x),0),col=c.filter(mine).reduce((a,x)=>a+num(x.amount),0);
-    const ts=num((T.sales||{})[id]),tc=num((T.coll||{})[id]);
-    return {id,net,col,ts,tc,ps:ts?net/ts*100:null,pc:tc?col/tc*100:null,proj:elapsed?net/elapsed*totalDays:0,needS:left&&ts>net?(ts-net)/left:0,needC:left&&tc>col?(tc-col)/left:0}})};
+    const onD=x=>mine(x)&&x.date===day;
+    const dayNet=s.filter(onD).reduce((a,x)=>a+gval(x),0)-r.filter(onD).reduce((a,x)=>a+gval(x),0),dayCol=c.filter(onD).reduce((a,x)=>a+num(x.amount),0);
+    const ts=num((T.sales||{})[id]),tc=num((T.coll||{})[id]),dts=totalDays?ts/totalDays:0,dtc=totalDays?tc/totalDays:0;
+    return {id,net,col,ts,tc,dts,dtc,dayNet,dayCol,dueS:dts*elapsed,ps:ts?net/ts*100:null,pc:tc?col/tc*100:null,proj:elapsed?net/elapsed*totalDays:0,needS:left&&ts>net?(ts-net)/left:0,needC:left&&tc>col?(tc-col)/left:0}})};
+}
+/* day-by-day plan: each working day carries an equal share of the monthly target */
+function dailyPlan(st){
+  const ids=st.rows.map(r=>r.id),mine=x=>ids.includes(String(x.user||''));
+  const DTS=st.rows.reduce((a,x)=>a+x.dts,0),DTC=st.rows.reduce((a,x)=>a+x.dtc,0);
+  let cT=0,cA=0,cTc=0,cC=0;const t=todayISO();
+  const rows=st.days.map(d=>{const w=isWorkDay(d),on=x=>mine(x)&&x.date===d;
+    const a=st.s.filter(on).reduce((q,x)=>q+gval(x),0)-st.r.filter(on).reduce((q,x)=>q+gval(x),0),col=st.c.filter(on).reduce((q,x)=>q+num(x.amount),0);
+    if(w){cT+=DTS;cTc+=DTC}cA+=a;cC+=col;
+    const future=d>t,diff=cA-cT;
+    let wd=d;try{wd=new Date(d+'T12:00:00').toLocaleDateString('ar',{weekday:'short',day:'numeric'})}catch(e){}
+    return `<tr${!w?' style="opacity:.55"':d===day?' style="background:var(--accent-soft)"':''}><td>${esc(wd)}</td><td>${w?'عمل':'<span class="muted">إجازة</span>'}</td>
+      <td class="n">${w?fmt(Math.round(DTS)):'—'}</td><td class="n">${future?'<span class="muted">—</span>':fmt(Math.round(a))}</td>
+      <td class="n">${fmt(Math.round(cT))}</td><td class="n">${future?'<span class="muted">—</span>':fmt(Math.round(cA))}</td>
+      <td class="n">${future||!DTS?'<span class="muted">—</span>':`<span class="chip ${diff>=0?'done':'low'}">${diff>=0?'+':''}${fmt(Math.round(diff))}</span>`}</td>
+      <td class="n">${w?fmt(Math.round(DTC)):'—'}</td><td class="n">${future?'<span class="muted">—</span>':fmt(Math.round(col))}</td></tr>`});
+  return `<section class="sec"><div class="sechead"><h3>التوزيع اليومي</h3><span class="sub">${myRole()==='rep'?'هدفك':'مجموع المناديب'} موزّع على ${fmt(st.totalDays)} يوم عمل (6 أيام في الأسبوع، الجمعة إجازة)</span></div>
+  ${tbl('<th>اليوم</th><th></th><th class="n">هدف المبيعات اليومي</th><th class="n">المبيعات المحققة</th><th class="n">الهدف التراكمي</th><th class="n">المحقق التراكمي</th><th class="n">الفرق</th><th class="n">هدف التحصيل اليومي</th><th class="n">المحصّل</th>',rows,'','')}</section>`;
 }
 const pctTone=p=>p==null?'':p>=100?'var(--good)':p>=70?'var(--accent)':p>=40?'var(--warn)':'var(--bad)';
 const pctLabel=p=>p==null?'—':p>=100?'تحقق الهدف':p>=70?'قريب':p>=40?'متوسط':'متأخر';
+/* collected ÷ net sales incl. VAT */
+const collRatio=(col,net)=>net>0?col/net*100:null;
+const ratioCell=(col,net)=>{const p=collRatio(col,net);if(p==null)return '<span class="muted">—</span>';const tone=p>=90?'done':p>=60?'new':p>=30?'prog':'low';return `<span class="chip ${tone}">${fmt(Math.round(p))}%</span>`};
 const bar=p=>p==null?'<span class="muted">لم يُحدد هدف</span>':`<div class="tbar" title="${fmt(p)}%"><i style="width:${Math.min(100,p).toFixed(1)}%;background:${pctTone(p)}"></i></div><span style="font-size:.82rem"><b>${fmt(Math.round(p))}%</b> · ${pctLabel(p)}</span>`;
 function targetCards(){const st=targetStats();if(!st.rows.some(x=>x.ts||x.tc))return '';
-  return `<section class="sec"><div class="sechead"><h3>${ic('net')}الأهداف الشهرية</h3><span class="sub"><a href="#targets">التفاصيل</a> · مضى ${fmt(st.elapsed)} من ${fmt(st.totalDays)} يوم</span></div>
+  return `<section class="sec"><div class="sechead"><h3>${ic('net')}الأهداف الشهرية</h3><span class="sub"><a href="#targets">التفاصيل</a> · مضى ${fmt(st.elapsed)} من ${fmt(st.totalDays)} يوم عمل</span></div>
   <div class="kpis">${st.rows.filter(x=>x.ts||x.tc).map(x=>`<div class="kpi" style="gap:6px"><span class="lb">${esc(userName(x.id))}</span>
     <span class="muted" style="font-size:.78rem">المبيعات ${fmt(x.net)} من ${fmt(x.ts)}</span>${bar(x.ps)}
-    ${x.tc?`<span class="muted" style="font-size:.78rem">التحصيل ${fmt(x.col)} من ${fmt(x.tc)}</span>${bar(x.pc)}`:''}</div>`).join('')}</div></section>`}
+    ${x.tc?`<span class="muted" style="font-size:.78rem">التحصيل ${fmt(x.col)} من ${fmt(x.tc)}</span>${bar(x.pc)}`:''}
+    <span style="font-size:.8rem">نسبة التحصيل من المبيعات ${ratioCell(x.col,x.net)}</span></div>`).join('')}</div></section>`}
 function vTargets(){
   const st=targetStats(),edit=canDo('targets'),T=targetsDoc()||{};
   let mlabel=st.mk;try{mlabel=new Date(st.mk+'-15T12:00:00').toLocaleDateString('ar',{month:'long',year:'numeric'})}catch(e){}
   const sum=f=>st.rows.reduce((a,x)=>a+f(x),0),TS=sum(x=>x.ts),TC=sum(x=>x.tc),NS=sum(x=>x.net),NC=sum(x=>x.col);
-  return `<div class="sechead"><h2>الأهداف الشهرية · ${esc(mlabel)}</h2><span class="sub">مضى ${fmt(st.elapsed)} من ${fmt(st.totalDays)} يوم · المتبقي ${fmt(st.left)} يوم · المبيعات = صافي شامل الضريبة بعد المرتجعات</span></div>
+  return `<div class="sechead"><h2>الأهداف الشهرية · ${esc(mlabel)}</h2><span class="sub">مضى ${fmt(st.elapsed)} من ${fmt(st.totalDays)} يوم عمل · المتبقي ${fmt(st.left)} يوم عمل · 6 أيام في الأسبوع والجمعة إجازة · المبيعات = صافي شامل الضريبة بعد المرتجعات</span></div>
   ${myRole()!=='rep'&&(TS||TC)?`<div class="kpis big"><div class="kpi" style="--c:var(--s1)"><span class="lb">${ic('sales')}إجمالي هدف المبيعات</span><span class="v">${fmt(NS)}</span><span class="s">من ${fmt(TS)}</span>${bar(TS?NS/TS*100:null)}</div>
     <div class="kpi" style="--c:var(--s3)"><span class="lb">${ic('collect')}إجمالي هدف التحصيل</span><span class="v">${fmt(NC)}</span><span class="s">من ${fmt(TC)}</span>${bar(TC?NC/TC*100:null)}</div></div>`:''}
   ${myRole()==='rep'&&!st.rows.length?`<div class="note">حسابك غير مربوط بمندوب في دفترة. اطلب من مدير النظام ربطه من تبويب الصلاحيات.</div>`:''}
   <section class="sec"><div class="sechead"><h3>تقدم المناديب</h3>${edit?`<span class="sub">اكتب الهدف في الخانات ثم اضغط حفظ الأهداف</span>`:''}</div>
-  ${tbl(`<th>المندوب</th><th class="n">هدف المبيعات</th><th class="n">المحقق</th><th style="min-width:150px">الإنجاز</th><th class="n">المطلوب يوميًا</th><th class="n">المتوقع آخر الشهر</th><th class="n">هدف التحصيل</th><th class="n">المحصّل</th><th style="min-width:150px">الإنجاز</th>`,
+  ${tbl(`<th>المندوب</th><th class="n">هدف المبيعات</th><th class="n">الهدف اليومي</th><th class="n">محقق ${esc(day===todayISO()?'اليوم':day)}</th><th class="n">المحقق</th><th style="min-width:150px">الإنجاز</th><th class="n">المطلوب يوميًا</th><th class="n">المتوقع آخر الشهر</th><th class="n">هدف التحصيل</th><th class="n">المحصّل</th><th style="min-width:150px">الإنجاز</th><th class="n">نسبة التحصيل من المبيعات</th>`,
     st.rows.map(x=>`<tr><td><b>${esc(userName(x.id))}</b></td>
       <td class="n">${edit?`<input id="tg-s-${esc(x.id)}" type="number" min="0" step="any" value="${x.ts||''}" placeholder="0" style="width:110px" inputmode="decimal">`:fmt(x.ts)}</td>
-      <td class="n">${fmt(x.net)}</td><td>${bar(x.ps)}</td>
+      <td class="n">${x.dts?fmt(Math.round(x.dts)):'—'}</td>
+      <td class="n">${x.dts?`<span class="chip ${x.dayNet>=x.dts?'done':'prog'}">${fmt(Math.round(x.dayNet))}</span>`:fmt(Math.round(x.dayNet))}</td>
+      <td class="n">${fmt(x.net)}${x.ts?`<br><span class="muted" style="font-size:.78rem">المفروض لين الحين ${fmt(Math.round(x.dueS))}</span>`:''}</td><td>${bar(x.ps)}</td>
       <td class="n">${x.needS?fmt(Math.round(x.needS)):'—'}</td>
       <td class="n">${x.proj?`${fmt(Math.round(x.proj))}${x.ts?` <span class="chip ${x.proj>=x.ts?'done':'prog'}">${x.proj>=x.ts?'على المسار':'أقل من الهدف'}</span>`:''}`:'—'}</td>
       <td class="n">${edit?`<input id="tg-c-${esc(x.id)}" type="number" min="0" step="any" value="${x.tc||''}" placeholder="0" style="width:110px" inputmode="decimal">`:fmt(x.tc)}</td>
-      <td class="n">${fmt(x.col)}</td><td>${bar(x.pc)}</td></tr>`),
-    st.rows.length>1?`<td>الإجمالي</td><td class="n">${fmt(TS)}</td><td class="n">${fmt(NS)}</td><td>${bar(TS?NS/TS*100:null)}</td><td></td><td></td><td class="n">${fmt(TC)}</td><td class="n">${fmt(NC)}</td><td>${bar(TC?NC/TC*100:null)}</td>`:'','لا يوجد مناديب.')}
+      <td class="n">${fmt(x.col)}</td><td>${bar(x.pc)}</td><td class="n">${ratioCell(x.col,x.net)}</td></tr>`),
+    st.rows.length>1?`<td>الإجمالي</td><td class="n">${fmt(TS)}</td><td class="n">${fmt(Math.round(sum(x=>x.dts)))}</td><td class="n">${fmt(Math.round(sum(x=>x.dayNet)))}</td><td class="n">${fmt(NS)}</td><td>${bar(TS?NS/TS*100:null)}</td><td></td><td></td><td class="n">${fmt(TC)}</td><td class="n">${fmt(NC)}</td><td>${bar(TC?NC/TC*100:null)}</td><td class="n">${ratioCell(NC,NS)}</td>`:'','لا يوجد مناديب.')}
   ${edit?`<div class="actions"><button type="button" class="pri sm" id="saveTargets">حفظ الأهداف</button>${T.updatedAt?`<span class="muted" style="font-size:.82rem">آخر تعديل ${new Date(T.updatedAt).toLocaleString('ar',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>`:''}</section>
-  <div class="note info">المتوقع آخر الشهر = المحقق ÷ الأيام الماضية × أيام الشهر. المطلوب يوميًا = المتبقي من الهدف ÷ الأيام المتبقية. لتحديد أهداف شهر آخر غيّر "يوم العمل" أعلى الصفحة.</div>`;
+  ${st.rows.some(x=>x.ts||x.tc)?dailyPlan(st):''}
+  <div class="note info">الهدف اليومي = الهدف الشهري ÷ أيام العمل (6 أيام في الأسبوع، الجمعة إجازة). نسبة التحصيل من المبيعات =المحصّل ÷ صافي المبيعات شامل الضريبة (أخضر 90% فأكثر، أزرق 60%، برتقالي 30%، أحمر أقل). المتوقع آخر الشهر = المحقق ÷ أيام العمل الماضية × أيام العمل في الشهر. المطلوب يوميًا = المتبقي من الهدف ÷ أيام العمل المتبقية. لتحديد أهداف شهر آخر غيّر "يوم العمل" أعلى الصفحة.</div>`;
 }
 async function saveTargets(){const T=targetsDoc()||{id:'t-'+monthKey(),month:monthKey()},sales={...(T.sales||{})},coll={...(T.coll||{})};
   repIds().forEach(id=>{const a=document.getElementById('tg-s-'+id),b=document.getElementById('tg-c-'+id);if(a)sales[id]=num(a.value);if(b)coll[id]=num(b.value)});
