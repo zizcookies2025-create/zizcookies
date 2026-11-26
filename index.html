@@ -189,6 +189,7 @@ body{margin:0;font-size:14px}
     <a href="#items">الأصناف والمواد</a>
     <a href="#calc" class="navcalc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/></svg>حاسبة الإنتاج</a>
     <a href="#targets" class="navcalc"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>الأهداف الشهرية</a>
+    <a href="#changes" class="navcalc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/><path d="M15 19l2 2 4-4"/></svg>اعتماد التعديلات<span class="chip prog" id="chgBadge" hidden></span></a>
     <a href="#charts">الرسوم البيانية</a>
     <a href="#report">التقارير</a>
     <a href="#users" hidden class="navcalc"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 13.8c2.1.8 3.5 2.9 3.5 5.2"/></svg>المستخدمون والصلاحيات<span class="chip prog" id="reqBadge" hidden></span></a>
@@ -203,15 +204,15 @@ body{margin:0;font-size:14px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
-const COLS=['products','materials','orders','issues','sales','returns','collections','meta','calcs','targets'];
-const S={products:[],materials:[],orders:[],issues:[],sales:[],returns:[],collections:[],meta:[],calcs:[],targets:[]};
+const COLS=['products','materials','orders','issues','sales','returns','collections','meta','calcs','targets','changes'];
+const S={products:[],materials:[],orders:[],issues:[],sales:[],returns:[],collections:[],meta:[],calcs:[],targets:[],changes:[]};
 let PROFILES=[],MYPROFILE=null,SB=null;
 /* ---------- roles: the owner holds everything; each person gets one role assigned by the owner ---------- */
 const ROLES={admin:'مدير (كل الصلاحيات)',production:'الإنتاج',rep:'مندوب',accounting:'المحاسبة',viewer:'مشاهدة فقط'};
 const ROLE_DESC={admin:'كل التبويبات وكل العمليات ما عدا إدارة الصلاحيات',production:'الطلبات واعتماد المتأخر منها، صرف المواد، حاسبة الإنتاج، عرض الأصناف',rep:'يشوف ويسجّل طلباته هو فقط، ويشوف مبيعاته ومرتجعات وتحصيلات عملائه فقط، بدون بيانات باقي المناديب',accounting:'المبيعات والمرتجعات والتحصيلات والرسوم البيانية والتقارير',viewer:'يشوف كل شيء بدون أي تعديل'};
-const ROLE_TABS={owner:'*',admin:'*',production:['today','orders','issues','calc','items','charts'],rep:['today','orders','sales','returns','collections','targets'],accounting:['today','sales','returns','collections','targets','charts','report'],viewer:['today','orders','issues','sales','returns','collections','targets','calc','items','charts','report'],none:[]};
-const ROLE_WRITE={owner:'*',admin:['orders','approve','issues','returns','collections','items','calc','sales','targets'],production:['orders','approve','issues','calc'],rep:['orders'],accounting:['returns','collections'],viewer:[],none:[]};
-const COL_KEY={orders:'orders',issues:'issues',sales:'sales',returns:'returns',collections:'collections',products:'items',materials:'items',meta:'calc',calcs:'approve',targets:'targets'};
+const ROLE_TABS={owner:'*',admin:'*',production:['today','orders','issues','calc','items','charts','changes'],rep:['today','orders','sales','returns','collections','targets','changes'],accounting:['today','sales','returns','collections','targets','charts','report','changes'],viewer:['today','orders','issues','sales','returns','collections','targets','calc','items','charts','report'],none:[]};
+const ROLE_WRITE={owner:'*',admin:['orders','approve','issues','returns','collections','items','calc','sales','targets','changes'],production:['orders','approve','issues','calc','changes'],rep:['orders','changes'],accounting:['returns','collections','changes'],viewer:[],none:[]};
+const COL_KEY={orders:'orders',issues:'issues',sales:'sales',returns:'returns',collections:'collections',products:'items',materials:'items',meta:'calc',calcs:'approve',targets:'targets',changes:'changes'};
 let IS_OWNER=false,MYEMAIL='';
 const lc=s=>String(s||'').trim().toLowerCase();
 /* role and linked rep come from the signed-in user's profile row */
@@ -292,9 +293,17 @@ async function loadAll(){
 let INVITES=[];
 async function loadProfiles(){const {data,error}=await SB.from('profiles').select('*').order('created_at');if(!error){PROFILES=data||[];MYPROFILE=PROFILES.find(p=>p.id===ME)||MYPROFILE}
   if(MYPROFILE&&MYPROFILE.role==='owner'){const r=await SB.from('invites').select('*').order('created_at');if(!r.error)INVITES=r.data||[]}}
-async function put(col,obj){
+/* every edit or delete of saved data needs a reason; the general manager (owner) approves or rejects it before it takes effect.
+   opts.flow marks routine workflow steps (order status, late-order approval) that are not edits of the record itself */
+const REVIEW_COLS=['orders','issues','products','materials','targets','sales','returns','collections'];
+async function put(col,obj,opts){
   if(!canWrite){toast('ليست لديك صلاحية التعديل على هذا النظام');return false}
   if(!canDo(COL_KEY[col]||col)){toast('صلاحيتك لا تسمح بهذا التعديل. راجع مدير النظام');return false}
+  const exists=!!obj.id&&RAW[col]&&RAW[col].has(obj.id);
+  if(exists&&REVIEW_COLS.includes(col)&&!(opts&&opts.flow))return reviewChange(col,'edit',RAW[col].get(obj.id),obj);
+  return rawPut(col,obj);
+}
+async function rawPut(col,obj){
   obj={...obj}; delete obj._by; obj.id=obj.id||uid(); obj.updatedAt=Date.now(); if(!obj.createdAt) obj.createdAt=Date.now();
   const exists=RAW[col]&&RAW[col].has(obj.id);
   const q=exists?SB.from('docs').update({data:obj}).eq('col',col).eq('id',obj.id).select():SB.from('docs').insert({col,id:obj.id,data:obj}).select();
@@ -303,12 +312,84 @@ async function put(col,obj){
   applyRow(data[0]);render();return true;
 }
 async function del(col,id){
-  if(!canWrite){toast('ليست لديك صلاحية التعديل على هذا النظام');return}
-  if(!canDo(COL_KEY[col]||col)){toast('صلاحيتك لا تسمح بالحذف. راجع مدير النظام');return}
-  if(col==='orders'&&myRole()==='rep'){const x=byId('orders',id);if(x&&x.createdBy!==ME){toast('تقدر تحذف طلباتك أنت فقط');return}}
+  if(!canWrite){toast('ليست لديك صلاحية التعديل على هذا النظام');return false}
+  if(!canDo(COL_KEY[col]||col)){toast('صلاحيتك لا تسمح بالحذف. راجع مدير النظام');return false}
+  if(col==='orders'&&myRole()==='rep'){const x=byId('orders',id);if(x&&x.createdBy!==ME){toast('تقدر تحذف طلباتك أنت فقط');return false}}
+  if(REVIEW_COLS.includes(col)&&RAW[col]&&RAW[col].has(id))return reviewChange(col,'delete',RAW[col].get(id),null);
+  return rawDel(col,id);
+}
+async function rawDel(col,id){
   const {error}=await SB.from('docs').delete().eq('col',col).eq('id',id);
-  if(error){handleErr(error);return}
-  applyRow({col,id},true);render();
+  if(error){handleErr(error);return false}
+  applyRow({col,id},true);render();return true;
+}
+/* ---------- change approvals ---------- */
+const COL_LABEL={orders:'الطلبات',issues:'صرف المواد',products:'الأصناف',materials:'المواد',targets:'الأهداف',sales:'المبيعات',returns:'المرتجعات',collections:'التحصيلات'};
+const FIELD_LABEL={name:'الاسم',qty:'الكمية',productId:'الصنف',user:'المندوب',note:'الملاحظات',status:'الحالة',date:'التاريخ',price:'السعر',unit:'الوحدة',opening:'الرصيد',min:'الحد الأدنى',pack:'وزن العبوة',packName:'اسم العبوة',kind:'النوع',bom:'التركيبة',contents:'محتوى البوكس',lines:'البنود',prods:'الأصناف',receiver:'المستلم',inactive:'معطّل',sales:'أهداف المبيعات',coll:'أهداف التحصيل',client:'العميل',amount:'المبلغ',method:'طريقة الدفع',invoice:'الفاتورة',reason:'السبب',approval:'الموافقة',window:'وقت الطلب',vatIncl:'السعر شامل الضريبة'};
+const SKIP_F=['id','_by','updatedAt','createdAt','createdBy','approvedBy','approvedAt'];
+function itemLabel(col,x){if(!x)return '';
+  if(col==='products'||col==='materials')return x.name||'';
+  if(col==='orders')return `${pName(x.productId)} × ${fmt(x.qty)} · ${userName(x.user)} · ${x.date||''}`;
+  if(col==='issues')return `إذن صرف ${x.date||''}${x.receiver?' · '+x.receiver:''}`;
+  if(col==='targets')return `أهداف ${x.month||''}`;
+  if(col==='collections')return `${x.client||''} · ${fmt(x.amount)}`;
+  return `${x.date||''} ${x.client||''}`}
+function showVal(k,v){if(v==null||v==='')return '—';if(k==='productId')return pName(v);if(k==='user')return userName(v);if(typeof v==='boolean')return v?'نعم':'لا';
+  if(Array.isArray(v))return v.length?v.map(o=>o&&typeof o==='object'?(o.m?mName(o.m)+' '+fmt(o.q):o.p?pName(o.p)+' '+fmt(o.q!=null?o.q:o.n):JSON.stringify(o)):String(v)).join('، '):'—';
+  if(typeof v==='object')return Object.entries(v).map(([a,b])=>`${userName(a)}: ${fmt(b)}`).join('، ');return String(v)}
+function diffRows(b,a){const keys=[...new Set([...Object.keys(b||{}),...Object.keys(a||{})])].filter(k=>!SKIP_F.includes(k));
+  return keys.filter(k=>JSON.stringify((b||{})[k]??null)!==JSON.stringify((a||{})[k]??null)).map(k=>({k,l:FIELD_LABEL[k]||k,b:showVal(k,(b||{})[k]),a:showVal(k,(a||{})[k])}))}
+function askReason(title,hint,optional){return new Promise(res=>{
+  const d=document.createElement('div');d.id='reasonBox';
+  d.style.cssText='position:fixed;inset:0;z-index:70;background:color-mix(in srgb,var(--ink) 45%,transparent);display:grid;place-items:center;padding:16px';
+  d.innerHTML=`<div class="card" style="max-width:440px;width:100%;display:flex;flex-direction:column;gap:10px"><h3 style="margin:0">${esc(title)}</h3><p class="muted" style="margin:0;font-size:.88rem">${esc(hint)}</p>
+    <textarea id="reasonTxt" rows="3" style="width:100%;font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line)" placeholder="${optional?'اختياري':'اكتب السبب'}"></textarea><span id="reasonErr" class="muted" style="color:var(--bad);font-size:.85rem"></span>
+    <div class="actions"><button type="button" class="pri" id="reasonOk">إرسال</button><button type="button" id="reasonCancel">إلغاء</button></div></div>`;
+  document.body.appendChild(d);const t=d.querySelector('#reasonTxt');t.focus();
+  const done=v=>{d.remove();res(v)};
+  d.querySelector('#reasonCancel').onclick=e=>{e.stopPropagation();done(null)};
+  d.querySelector('#reasonOk').onclick=e=>{e.stopPropagation();const v=t.value.trim();if(!v&&!optional){d.querySelector('#reasonErr').textContent='السبب مطلوب';return}done(v)};
+})}
+async function reviewChange(col,action,before,after){
+  const owner=myRole()==='owner',verb=action==='delete'?'الحذف':'التعديل';
+  const reason=await askReason(`سبب ${verb}`,owner?`${COL_LABEL[col]||col}: ${itemLabel(col,before)}. يُطبّق مباشرة ويُسجّل في سجل التعديلات.`:`${COL_LABEL[col]||col}: ${itemLabel(col,before)}. يُرسل للمدير العام، ولا يُطبّق إلا بعد اعتماده.`);
+  if(reason==null){toast('أُلغي '+verb);return false}
+  const b={...before};delete b._by;const a=after?{...after}:null;if(a)delete a._by;
+  const rec={id:'chg-'+uid(),col,docId:before.id,action,before:b,after:a,reason,label:itemLabel(col,before),by:ME,byName:personName(ME),at:Date.now(),status:'pending'};
+  if(owner){const ok=action==='delete'?await rawDel(col,before.id):await rawPut(col,a);if(!ok)return false;
+    await rawPut('changes',{...rec,status:'approved',decidedBy:ME,decidedAt:Date.now(),self:true});toast(action==='delete'?'تم الحذف وسُجّل السبب':'تم حفظ التعديل وسُجّل السبب');return true}
+  if(await rawPut('changes',rec))toast(`أُرسل طلب ${verb} للمدير العام. يُطبّق بعد اعتماده`);
+  return false;
+}
+async function decideChange(id,ok){const c=byId('changes',id);if(!c||c.status!=='pending')return;
+  if(ok){const ap=c.action==='delete'?(RAW[c.col].has(c.docId)?await rawDel(c.col,c.docId):true):await rawPut(c.col,{...c.after,id:c.docId});if(!ap)return;
+    if(await rawPut('changes',{...c,status:'approved',decidedBy:ME,decidedAt:Date.now()}))toast('تم اعتماد '+(c.action==='delete'?'الحذف':'التعديل')+' وتطبيقه');return}
+  const why=await askReason('سبب الرفض','يظهر للموظف اللي طلب التعديل.',true);if(why==null)return;
+  if(await rawPut('changes',{...c,status:'rejected',decidedBy:ME,decidedAt:Date.now(),rejectNote:why}))toast('تم رفض الطلب، والبيانات باقية كما هي')}
+const pendingChanges=()=>S.changes.filter(c=>c.status==='pending');
+function vChanges(){
+  const owner=myRole()==='owner',mine=c=>owner||c.by===ME,list=S.changes.filter(mine).sort((a,b)=>(b.at||0)-(a.at||0));
+  const pend=list.filter(c=>c.status==='pending'),done=list.filter(c=>c.status!=='pending').slice(0,150);
+  const when=ts=>ts?new Date(ts).toLocaleString('ar',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+  const ST={pending:['prog','بانتظار الاعتماد'],approved:['done','معتمد'],rejected:['low','مرفوض']};
+  const card=c=>{const cur=RAW[c.col]&&RAW[c.col].get(c.docId),stale=c.status==='pending'&&c.action==='edit'&&cur&&c.before&&cur.updatedAt!==c.before.updatedAt;
+    const D=c.action==='delete'?[]:diffRows(c.before,c.after);
+    return `<div class="card" style="display:flex;flex-direction:column;gap:8px;border-inline-start:4px solid ${c.status==='pending'?'var(--warn)':c.status==='approved'?'var(--good)':'var(--bad)'}">
+    <div class="sechead" style="margin:0"><b>${c.action==='delete'?'🗑️ حذف':'✏️ تعديل'} · ${esc(COL_LABEL[c.col]||c.col)}${c.source==='daftra'?' · دفترة':''}</b><span class="chip ${ST[c.status][0]}">${ST[c.status][1]}</span></div>
+    <span>${esc(c.label||'')}</span>
+    <span class="muted" style="font-size:.85rem">طلبه <b>${esc(c.byName||personName(c.by))}</b> · ${when(c.at)}${c.decidedAt?` · ${c.status==='approved'?'اعتمده':'رفضه'} ${esc(personName(c.decidedBy))} ${when(c.decidedAt)}`:''}${c.self?' · تعديل المدير العام':''}</span>
+    <div style="background:var(--accent-soft);border-radius:8px;padding:8px"><b>السبب:</b> ${esc(c.reason||'—')}</div>
+    ${D.length?tbl('<th>الحقل</th><th>قبل</th><th>بعد</th>',D.map(r=>`<tr><td>${esc(r.l)}</td><td class="wrap" style="color:var(--bad)">${esc(r.b)}</td><td class="wrap" style="color:var(--good)"><b>${esc(r.a)}</b></td></tr>`),'',''):c.action==='edit'?'<span class="muted">لا يوجد فرق في البيانات</span>':''}
+    ${c.rejectNote?`<div class="note">سبب الرفض: ${esc(c.rejectNote)}</div>`:''}
+    ${stale?'<div class="note">تنبيه: هذا السجل تغيّر بعد إرسال الطلب. الاعتماد يكتب فوقه بالقيم الجديدة في الطلب.</div>':''}
+    ${owner&&c.status==='pending'?`<div class="actions"><button type="button" class="pri sm" data-chg="${esc(c.id)}" data-ok="1">✓ اعتماد</button><button type="button" class="sm" data-chg="${esc(c.id)}" data-ok="0">✕ رفض</button></div>`:''}</div>`};
+  return `<div class="sechead"><h2>اعتماد التعديلات</h2><span class="sub">${owner?'أي تعديل أو حذف من الموظفين ما يُطبّق إلا بعد اعتمادك':'تعديلاتك وحذفك يحتاج سبب واعتماد المدير العام'}</span></div>
+  <div class="kpis"><div class="kpi" style="--c:var(--warn)"><span class="lb">بانتظار الاعتماد</span><span class="v">${fmt(pend.length)}</span></div>
+    <div class="kpi" style="--c:var(--good)"><span class="lb">معتمد</span><span class="v">${fmt(list.filter(c=>c.status==='approved').length)}</span></div>
+    <div class="kpi" style="--c:var(--bad)"><span class="lb">مرفوض</span><span class="v">${fmt(list.filter(c=>c.status==='rejected').length)}</span></div></div>
+  <section class="sec"><h3>بانتظار الاعتماد</h3>${pend.length?pend.map(card).join(''):'<p class="muted">لا توجد طلبات معلقة.</p>'}</section>
+  <section class="sec"><h3>السجل</h3>${done.length?done.map(card).join(''):'<p class="muted">لا يوجد سجل بعد.</p>'}</section>
+  <div class="note info"><b>تعديلات دفترة:</b> التطبيق ما يقدر يمنع التعديل أو الحذف داخل دفترة نفسها. عشان يكون إجباري هناك بعد، افتح دفترة ← الإعدادات ← الأدوار والصلاحيات، وشِل صلاحية تعديل وحذف الفواتير والمرتجعات والمدفوعات عن كل الأدوار ما عدا المدير العام.</div>`;
 }
 function handleErr(e){
   if(e&&(e.code==='42501'||/row-level security/i.test(e.message||''))){toast('صلاحيتك لا تسمح بهذا التعديل');return}
@@ -362,7 +443,7 @@ function render(){
   if(ready&&!canTab(view)){const first=[...document.querySelectorAll('#tabs a')].find(a=>!a.hidden);if(first){view=first.getAttribute('href').slice(1);history.replaceState(null,'','#'+view);return render()}}
   const roleLbl=R==='owner'?'المالك · كل الصلاحيات':R==='none'?'بدون صلاحية بعد':ROLES[R];
   $('#mode').textContent=mode==='loading'?'جارٍ تحميل البيانات…':mode==='cloud'?(canWrite?'البيانات مشتركة مع فريقك · '+roleLbl:'عرض فقط · لا تملك صلاحية التعديل'):'وضع محلي · البيانات محفوظة في هذا المتصفح فقط';
-  const V={today:vToday,orders:vOrders,issues:vIssues,sales:vSales,returns:vReturns,collections:vCollections,items:vItems,charts:vCharts,calc:vCalc,report:vReport,users:vUsers,targets:vTargets}[view]||vToday;
+  const V={today:vToday,orders:vOrders,issues:vIssues,sales:vSales,returns:vReturns,collections:vCollections,items:vItems,charts:vCharts,calc:vCalc,report:vReport,users:vUsers,targets:vTargets,changes:vChanges}[view]||vToday;
   let h='';
   if(note) h+=`<div class="note">${esc(note)}</div>`;
   if(ready&&R==='none') h+=`<div class="card" style="text-align:center;padding:40px 16px"><h2>أهلًا بك في نظام زيزكوكيز</h2><p class="muted">تم إنشاء حسابك وتسجيل دخولك. بانتظار أن يحدد لك مدير النظام صلاحيتك، وبعدها تظهر لك التبويبات الخاصة بك تلقائيًا.</p></div>`;
@@ -790,7 +871,7 @@ function vCalc(){
   <div class="kpi" style="--c:var(--s2)"><span class="lb">${ic('orders')}عدد الصواني</span><span class="v">${fmt(trays)}</span><span class="s">${R.T} حبة للصينية · كل نوع على صوانيه</span></div>
   <div class="kpi" style="--c:var(--accent)"><span class="lb">${ic('issue')}الوزن الإجمالي</span><span class="v">${kg(totG)} كجم</span><span class="s">${fmt(totG)} جرام</span></div>
   <div class="kpi" style="--c:var(--s3)"><span class="lb">${ic('issue')}عدد المواد</span><span class="v">${fmt(R.mats.length)}</span></div></div>
-  ${cookieBlock(draft.calc.filter(l=>l.p),canDo('meta'))}
+  ${cookieBlock(draft.calc.filter(l=>l.p),canDo('calc'))}
   <section class="sec calcres"><h3>المواد المطلوبة</h3>
   ${tbl('<th>المادة</th><th class="n">الإجمالي بالجرام</th><th class="n">الإجمالي بالكيلو</th><th>العبوة</th><th class="n">عدد العبوات</th><th class="n">يُصرف (تقريب لأعلى)</th>',R.mats.map(m=>{const M=byId('materials',m.id),pk=M&&num(M.pack),pn=(M&&M.packName)||'عبوة';return `<tr><td>${esc(mName(m.id))}</td><td class="n">${fmt(+m.g.toFixed(2))}</td><td class="n"><b>${kg(m.g)}</b></td><td>${pk?`${esc(pn)} ${fmt(pk)} جم`:`<span class="muted">لم يُحدد وزن العبوة</span>`}</td><td class="n">${pk?fmt(+(m.g/pk).toFixed(2)):'—'}</td><td class="n">${pk?`<b>${fmt(Math.ceil(m.g/pk-1e-9))}</b> ${esc(pn)}`:'—'}</td></tr>`}),R.mats.length?`<td>الإجمالي</td><td class="n">${fmt(+totG.toFixed(2))}</td><td class="n">${kg(totG)}</td><td colspan="3"></td>`:'','أضف صنفًا له تركيبة وعدد قطع لعرض المواد المطلوبة.')}</section>
   <section class="sec"><h3>الحبات والصواني حسب النوع</h3>
@@ -1030,6 +1111,7 @@ setInterval(()=>{if(LOCKED||mode!=='cloud')return;if(Date.now()-lastAct>idleMin(
 function personName(id){const p=PROFILES.find(x=>x.id===id);return p?(p.name||showLogin(p.email)||'مستخدم'):'مستخدم'}
 function paintAcct(){
   const n=PROFILES.filter(p=>p.role==='none').length,bd=$('#reqBadge');if(bd){bd.hidden=!(n&&myRole()==='owner');bd.textContent=n}
+  {const pc=pendingChanges().filter(c=>myRole()==='owner'||c.by===ME).length,cb=$('#chgBadge');if(cb){cb.hidden=!pc;cb.textContent=pc}}
   const pl=$('#permLink');if(pl)pl.hidden=myRole()!=='owner';
   if(mode!=='cloud'||!ME){$('#acct').hidden=true;return}const R=myRole();$('#acct').hidden=false;$('#acctName').textContent=personName(ME);$('#acctRole').textContent=R==='owner'?'المالك':R==='none'?'بانتظار الصلاحية':ROLES[R]}
 /* install prompt (Android / desktop Chrome) */
@@ -1155,7 +1237,7 @@ document.addEventListener('submit',async e=>{
     const rec={date:day,orderId:'',prods,receiver:val('i-r'),note:val('i-n'),lines};
     const ord=null;
     draft.issueLines=[{m:'',q:''}];draft.issueProds=[{p:'',q:''}];draft.issueOrder='';reindex('ip');clear(['i-r','i-n']);skipRestore=true;render();
-    if(await put('issues',rec)){toast('تم تسجيل إذن الصرف'); if(ord&&(ord.status||'new')==='new') put('orders',{...ord,status:'prog'})}
+    if(await put('issues',rec)){toast('تم تسجيل إذن الصرف'); if(ord&&(ord.status||'new')==='new') put('orders',{...ord,status:'prog'},{flow:true})}
   }
   if(f==='fSale'||f==='fReturn'){
     const k=f==='fSale'?'s':'r', p=val(k+'-p'),q=num(val(k+'-q')),pr=num(val(k+'-pr'));
@@ -1204,7 +1286,7 @@ document.addEventListener('change',e=>{
     render();
   }
   if((t.id==='s-p'||t.id==='r-p')){const p=byId('products',t.value);const pr=document.getElementById(t.id==='s-p'?'s-pr':'r-pr');if(p&&pr)pr.value=pPrice(p)||''}
-  if(t.dataset.status){const o=byId('orders',t.dataset.status);if(o&&o.status!==t.value)put('orders',{...o,status:t.value})}
+  if(t.dataset.status){const o=byId('orders',t.dataset.status);if(o&&o.status!==t.value)put('orders',{...o,status:t.value},{flow:true})}
   if(t.dataset.pf){const k=t.dataset.k,v=k==='name'?t.value.trim():t.value;saveProfile(t.dataset.pf,{[k]:k==='rep'?(v||null):v});return}
   if(t.id==='idle'){const s=settingsDoc();put('meta',{...s,id:'settings',idle:num(t.value)}).then(ok=>{if(ok)toast('تم حفظ مهلة الخروج')});return}
   if(t.id&&t.id.startsWith('rc-'))return;
@@ -1216,8 +1298,9 @@ document.addEventListener('click',async e=>{
   if(b.id==='prevDay'||b.id==='nextDay'||b.id==='toToday'){day=b.id==='toToday'?todayISO():shiftDay(day,b.id==='prevDay'?-1:1);$('#day').value=day;draft.issueOrder='';render();return}
   if(b.dataset.del){
     if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الحذف';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='حذف'}},3500);return}
-    await del(b.dataset.del,b.dataset.id); toast('تم الحذف'); return;
+    const c0=b.dataset.del,rev=REVIEW_COLS.includes(c0);if(await del(c0,b.dataset.id)&&!rev)toast('تم الحذف'); return;
   }
+  if(b.dataset.chg){b.disabled=true;await decideChange(b.dataset.chg,b.dataset.ok==='1');b.disabled=false;return}
   if(b.dataset.setpw){const id=b.dataset.setpw,inp=document.getElementById('np-'+id),pw=inp?inp.value:'';if(pw.length<6){toast('كلمة المرور المؤقتة لازم تكون 6 خانات على الأقل');return}
     b.disabled=true;const {error}=await SB.rpc('owner_set_password',{target:id,pw});b.disabled=false;
     if(error){toast('تعذر تعيين كلمة المرور');return}inp.value='';toast('تم تعيين كلمة المرور المؤقتة. أبلغ المستخدم بها، ويغيّرها بعد دخوله');return}
@@ -1235,7 +1318,7 @@ document.addEventListener('click',async e=>{
   if(b.id==='logout'){lockNow(true);return}
   if(b.id==='dlOrders'){downloadOrders();return}
   if(b.id==='dlOrdersPdf'){b.disabled=true;const t0=b.textContent;b.textContent='جارٍ تجهيز الملف…';downloadOrdersPdf().finally(()=>{b.disabled=false;b.textContent=t0});return}
-  if(b.dataset.appr){const x=byId('orders',b.dataset.id);if(!x)return;if(await put('orders',{...x,approval:b.dataset.appr,approvedBy:ME||'',approvedAt:Date.now()}))toast(b.dataset.appr==='ok'?'تمت الموافقة وأُضيف الطلب إلى ملف اليوم':'تم رفض الطلب');return}
+  if(b.dataset.appr){const x=byId('orders',b.dataset.id);if(!x)return;if(await put('orders',{...x,approval:b.dataset.appr,approvedBy:ME||'',approvedAt:Date.now()},{flow:true}))toast(b.dataset.appr==='ok'?'تمت الموافقة وأُضيف الطلب إلى ملف اليوم':'تم رفض الطلب');return}
   if(b.dataset.ifilter){draft.itemFilter=b.dataset.ifilter;render();return}
   if(b.dataset.toggle){const x=byId(b.dataset.toggle,b.dataset.id);if(!x)return;if(await put(b.dataset.toggle,{...x,inactive:!x.inactive}))toast((x.inactive?'تم تفعيل ':'تم تعطيل ')+x.name);return}
   if(b.id==='addLine'){draft.issueLines.push({m:'',q:''});render();return}
