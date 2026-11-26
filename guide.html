@@ -44,6 +44,15 @@ main{max-width:520px;margin:0 auto;padding:14px 14px 30px}
 .toolbar{display:flex;justify-content:space-around;align-items:center;padding:8px 6px 16px;background:#f7f7f7;font-size:18px;color:var(--blue)}
 .kbd{position:absolute;bottom:0;left:0;right:0;height:120px;background:#d1d4d9;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;padding:8px 4px}
 .kbd i{background:#fff;border-radius:4px}
+.iosbar{display:flex;align-items:center;gap:6px;padding:8px 8px 16px;background:#fff;direction:ltr}
+.iosbar .circ{width:30px;height:30px;border-radius:50%;background:#eee;display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
+.iosbar .pill{flex:1;background:#eee;border-radius:16px;padding:7px 8px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.imenu{position:absolute;left:10px;bottom:62px;width:175px;background:rgba(250,250,250,.97);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:11px;overflow:hidden}
+.imenu div{padding:10px;border-bottom:1px solid #eee;display:flex;gap:6px;align-items:center}
+.imenu .two{justify-content:space-between;font-size:9px}
+.imenu .hl{background:#fff7d6;font-weight:700}
+.toggle{display:inline-block;width:30px;height:18px;border-radius:9px;background:#34c759;position:relative}
+.toggle::after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#fff}
 .go{position:absolute;bottom:8px;right:8px;background:var(--blue);color:#fff;font-size:11px;border-radius:6px;padding:8px 14px;z-index:2}
 /* sheet */
 .dim{position:absolute;inset:0;background:rgba(0,0,0,.3)}
@@ -96,7 +105,9 @@ main{max-width:520px;margin:0 auto;padding:14px 14px 30px}
 const URL_TXT='zizcookies2025-create.github.io/zizcookies';
 const web=(bottom,extra='')=>`<div class="scene web">${bottom?'':`<div class="webtop"><div class="bar">🔒 ${URL_TXT}</div></div>`}
   <div class="page"><img src="icon-192.png" alt=""><div class="t">دفتر الإنتاج اليومي</div><div class="line"></div><div class="line s"></div><div class="line"></div><div class="line s"></div></div>
-  ${bottom?`<div class="bar bottom">🔒 ${URL_TXT}</div><div class="toolbar"><span>‹</span><span>›</span><span>⬆️</span><span>📖</span><span>⋯</span></div>`:''}${extra}</div>`;
+  ${bottom?`<div class="iosbar"><span class="circ">⋯</span><span class="pill">↻ ${URL_TXT}</span><span class="circ">›</span></div>`:''}${extra}</div>`;
+const iosMenu=`<div class="imenu"><div class="hl"><span>📤</span> مشاركة</div><div><span>⊕</span> إضافة إلى مجموعة</div><div><span>📖</span> إضافة إشارة مرجعية...</div><div class="two"><span>📑 الإشارات المرجعية</span><span>▦ جميع علامات التبويب</span></div></div>`;
+const iosSheet=(hl)=>`<div class="dim"></div><div class="sheet"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><img src="icon-192.png" alt="" style="width:30px;border-radius:7px"><b>دفتر الإنتاج اليومي</b></div><div class="row">نسخ <span>📄</span></div><div class="row">إضافة إلى قائمة القراءة <span>👓</span></div><div class="row">إضافة إشارة مرجعية <span>📖</span></div><div class="row ${hl?'hl':''}">${hl?'<b>إضافة إلى الشاشة الرئيسية</b>':'إضافة إلى الشاشة الرئيسية'} <span>➕</span></div><div class="row">عرض المزيد <span>⌄</span></div></div>`;
 const home=(withZiz,browser)=>`<div class="scene home">
   <div class="app"><div class="ico">📷</div>الكاميرا</div><div class="app"><div class="ico">🗓️</div>التقويم</div><div class="app"><div class="ico">⚙️</div>الإعدادات</div><div class="app"><div class="ico">🖼️</div>الصور</div>
   <div class="app"><div class="ico">🗺️</div>الخرائط</div><div class="app"><div class="ico">🌤️</div>الطقس</div><div class="app"><div class="ico">📝</div>الملاحظات</div>
@@ -106,10 +117,12 @@ const kbd='<div class="kbd">'+'<i></i>'.repeat(30)+'</div><div class="go">انت
 const FLOWS={
  ios:{note:'مهم: لازم Safari بالذات. إذا فتحت الرابط من واتساب أو من متصفح ثاني ما يطلع خيار "إضافة إلى الشاشة الرئيسية". في التطبيق اضغط "نسخ رابط التطبيق" ثم الصقه في Safari.',steps:[
   {t:'افتح متصفح Safari',p:'من شاشة الجوال اضغط أيقونة Safari، البوصلة الزرقاء.',s:home(false,'safari'),x:[157,445]},
-  {t:'الصق رابط التطبيق',p:'اضغط شريط العنوان، الصق الرابط، واضغط "انتقال".',s:web(true,kbd),x:[205,462]},
-  {t:'اضغط زر المشاركة',p:'الزر اللي فيه مربع وسهم ⬆️ تحت. إذا ما شفته اضغط "⋯" ثم "مشاركة".',s:web(true),x:[123,462]},
-  {t:'اختر "إضافة إلى الشاشة الرئيسية"',p:'انزل في القائمة شوي. أحيانًا يكون تحت "عرض المزيد".',s:web(true,`<div class="dim"></div><div class="sheet"><div class="row">نسخ <span>📄</span></div><div class="row">إضافة إلى قائمة القراءة <span>👓</span></div><div class="row">إضافة إشارة مرجعية <span>📖</span></div><div class="row hl"><b>إضافة إلى الشاشة الرئيسية</b> <span>➕</span></div></div>`),x:[115,440]},
-  {t:'اضغط "إضافة"',p:'فوق على اليمين. تقدر تخلي الاسم زي ما هو.',s:`<div class="scene web" style="background:#f2f2f7"><div class="addtop"><span>إلغاء</span><span style="color:#000">إضافة إلى الشاشة</span><span>إضافة</span></div><div class="addbody"><img src="icon-192.png" alt=""><div><b>زيزكوكيز</b><br><span style="color:#888;direction:ltr;display:inline-block">${URL_TXT}</span></div></div></div>`,x:[205,48]},
+  {t:'افتح رابط التطبيق',p:'اضغط شريط العنوان تحت، الصق الرابط، واضغط "انتقال". ما يحتاج تنزّل شي من App Store.',s:web(true,kbd),x:[205,462]},
+  {t:'اضغط "⋯" تحت على اليسار',p:'الدائرة اللي فيها ثلاث نقاط، بجنب شريط العنوان تحت.',s:web(true),x:[23,456]},
+  {t:'اضغط "مشاركة"',p:'أول خيار في القائمة. انتبه: "إضافة إشارة مرجعية" مو هو المطلوب.',s:web(true,iosMenu),x:[150,290]},
+  {t:'اسحب الصفحة لفوق',p:'تطلع صفحة المشاركة. اسحبها لفوق عشان تشوف باقي الخيارات.',s:web(true,iosSheet(false)),x:[115,330]},
+  {t:'اضغط "إضافة إلى الشاشة الرئيسية"',p:'إذا ما لقيته، اضغط "عرض المزيد" وبتلقاه هناك.',s:web(true,iosSheet(true)),x:[115,416]},
+  {t:'اضغط "إضافة" فوق',p:'خلّ "فتح كتطبيق ويب" مفعّل (أخضر)، ثم اضغط "إضافة" فوق.',s:`<div class="scene web" style="background:#f2f2f7"><div class="addtop"><span>إلغاء</span><span style="color:#000">إضافة إلى الشاشة</span><span>إضافة</span></div><div class="addbody"><img src="icon-192.png" alt=""><div><b>زيزكوكيز</b><br><span style="color:#888;direction:ltr;display:inline-block">${URL_TXT}</span></div></div><div class="addbody" style="top:140px;justify-content:space-between">فتح كتطبيق ويب <span class="toggle"></span></div></div>`,x:[25,48]},
   {t:'تم! افتح التطبيق من الأيقونة',p:'تطلع أيقونة زيزكوكيز على شاشة جوالك. افتحها من هنا دايمًا وسجّل دخولك برقم جوالك.',s:home(true,'safari'),x:[205,150]}]},
  and:{note:'مهم: استخدم Chrome. إذا فتحت الرابط من واتساب، اضغط ⋮ فوق واختر "فتح في Chrome" أو انسخ الرابط والصقه في Chrome.',steps:[
   {t:'افتح متصفح Chrome',p:'من شاشة الجوال اضغط أيقونة Chrome.',s:home(false,'chrome'),x:[157,445]},
