@@ -325,7 +325,7 @@ async function rawDel(col,id){
 }
 /* ---------- change approvals ---------- */
 const COL_LABEL={orders:'الطلبات',issues:'صرف المواد',products:'الأصناف',materials:'المواد',targets:'الأهداف',sales:'المبيعات',returns:'المرتجعات',collections:'التحصيلات'};
-const FIELD_LABEL={name:'الاسم',qty:'الكمية',productId:'الصنف',user:'المندوب',note:'الملاحظات',status:'الحالة',date:'التاريخ',price:'السعر',unit:'الوحدة',opening:'الرصيد',min:'الحد الأدنى',pack:'وزن العبوة',packName:'اسم العبوة',kind:'النوع',bom:'التركيبة',contents:'محتوى البوكس',lines:'البنود',prods:'الأصناف',receiver:'المستلم',inactive:'معطّل',sales:'أهداف المبيعات',coll:'أهداف التحصيل',client:'العميل',amount:'المبلغ',method:'طريقة الدفع',invoice:'الفاتورة',reason:'السبب',approval:'الموافقة',window:'وقت الطلب',vatIncl:'السعر شامل الضريبة'};
+const FIELD_LABEL={name:'الاسم',qty:'الكمية',productId:'الصنف',user:'المندوب',note:'الملاحظات',status:'الحالة',date:'التاريخ',price:'السعر',unit:'الوحدة',opening:'الرصيد',min:'الحد الأدنى',pack:'وزن العبوة',packName:'اسم العبوة',kind:'النوع',bom:'التركيبة',contents:'محتوى البوكس',lines:'البنود',prods:'الأصناف',receiver:'المستلم',inactive:'معطّل',sales:'أهداف المبيعات',coll:'أهداف التحصيل',client:'العميل',amount:'المبلغ',method:'طريقة الدفع',invoice:'الفاتورة',reason:'السبب',approval:'الموافقة',window:'وقت الطلب',vatIncl:'السعر شامل الضريبة',c:'العميل',d:'التاريخ',u:'المندوب',l:'الأصناف',gl:'الإجمالي شامل الضريبة',tot:'إجمالي الفاتورة',no:'الرقم',a:'المبلغ',m:'طريقة الدفع',inv:'الفاتورة',n:'ملاحظات',r:'نوع المرتجع'};
 const SKIP_F=['id','_by','updatedAt','createdAt','createdBy','approvedBy','approvedAt'];
 function itemLabel(col,x){if(!x)return '';
   if(col==='products'||col==='materials')return x.name||'';
@@ -334,7 +334,10 @@ function itemLabel(col,x){if(!x)return '';
   if(col==='targets')return `أهداف ${x.month||''}`;
   if(col==='collections')return `${x.client||''} · ${fmt(x.amount)}`;
   return `${x.date||''} ${x.client||''}`}
-function showVal(k,v){if(v==null||v==='')return '—';if(k==='productId')return pName(v);if(k==='user')return userName(v);if(typeof v==='boolean')return v?'نعم':'لا';
+function showVal(k,v){if(v==null||v==='')return '—';if(k==='productId')return pName(v);if(k==='user'||k==='u')return userName(v);
+  if(k==='l'&&Array.isArray(v))return v.map(x=>`${x[3]||pName(x[0])} × ${fmt(+(+x[1]).toFixed(3))} @ ${fmt(x[2])}`).join('، ');
+  if(k==='gl'&&Array.isArray(v))return fmt(v.reduce((a,x)=>a+num(x),0));
+  if(k==='m')return METHODS[v]||v;if(typeof v==='boolean')return v?'نعم':'لا';
   if(Array.isArray(v))return v.length?v.map(o=>o&&typeof o==='object'?(o.m?mName(o.m)+' '+fmt(o.q):o.p?pName(o.p)+' '+fmt(o.q!=null?o.q:o.n):JSON.stringify(o)):String(v)).join('، '):'—';
   if(typeof v==='object')return Object.entries(v).map(([a,b])=>`${userName(a)}: ${fmt(b)}`).join('، ');return String(v)}
 function diffRows(b,a){const keys=[...new Set([...Object.keys(b||{}),...Object.keys(a||{})])].filter(k=>!SKIP_F.includes(k));
@@ -362,13 +365,28 @@ async function reviewChange(col,action,before,after){
   return false;
 }
 async function decideChange(id,ok){const c=byId('changes',id);if(!c||c.status!=='pending')return;
+  if(c.source==='daftra'){ /* already applied in Daftra; approval records the decision, rejection means it must be corrected in Daftra */
+    const why=ok?'':await askReason('سبب الرفض','التعديل صار في دفترة، فلازم يتصحّح هناك. السبب يظهر للمندوب.',true);if(!ok&&why==null)return;
+    if(await rawPut('changes',{...c,status:ok?'approved':'rejected',decidedBy:ME,decidedAt:Date.now(),rejectNote:ok?'':(why||'')+(why?' · ':'')+'يجب تصحيحه في دفترة'}))toast(ok?'تم اعتماد تعديل دفترة':'تم الرفض، وظهر للمندوب إنه لازم يصحّحه في دفترة');return}
   if(ok){const ap=c.action==='delete'?(RAW[c.col].has(c.docId)?await rawDel(c.col,c.docId):true):await rawPut(c.col,{...c.after,id:c.docId});if(!ap)return;
     if(await rawPut('changes',{...c,status:'approved',decidedBy:ME,decidedAt:Date.now()}))toast('تم اعتماد '+(c.action==='delete'?'الحذف':'التعديل')+' وتطبيقه');return}
   const why=await askReason('سبب الرفض','يظهر للموظف اللي طلب التعديل.',true);if(why==null)return;
   if(await rawPut('changes',{...c,status:'rejected',decidedBy:ME,decidedAt:Date.now(),rejectNote:why}))toast('تم رفض الطلب، والبيانات باقية كما هي')}
-const pendingChanges=()=>S.changes.filter(c=>c.status==='pending');
+const isReq=c=>c.kind!=='reason';
+const myRep=()=>String((MYPROFILE&&MYPROFILE.rep)||'');
+const seesChange=c=>myRole()==='owner'||c.by===ME||(c.source==='daftra'&&myRep()&&String(c.rep||'')===myRep());
+const pendingChanges=()=>S.changes.filter(c=>isReq(c)&&c.status==='pending');
+/* reasons for Daftra edits are separate small records, so a rep can add one without being able to change the request itself */
+function reasonFor(c){const r=S.changes.filter(x=>x.kind==='reason'&&x.ref===c.id).sort((a,b)=>(b.at||0)-(a.at||0))[0];return r||null}
+async function addReason(id){const c=byId('changes',id);if(!c)return;
+  const why=await askReason('سبب التعديل في دفترة',`${c.label||''}. اكتب ليش تعدّلت أو انحذفت.`);if(why==null)return;
+  if(await rawPut('changes',{id:'rsn-'+uid(),kind:'reason',ref:c.id,reason:why,by:ME,byName:personName(ME),at:Date.now()}))toast('تم إرسال السبب للمدير العام')}
+async function syncDaftra(b){b.disabled=true;const t0=b.textContent;b.textContent='جارٍ السحب من دفترة…';
+  try{const {data,error}=await SB.functions.invoke('daftra-sync');if(error||!data||!data.ok)throw error||new Error((data&&data.error)||'');await loadAll();render();toast(`تم التحديث من دفترة${data.changes?` · ${data.changes} تعديل جديد بانتظار الاعتماد`:''}`)}
+  catch(e){toast('تعذر السحب من دفترة الآن')}finally{if(b.isConnected){b.disabled=false;b.textContent=t0}}}
 function vChanges(){
-  const owner=myRole()==='owner',mine=c=>owner||c.by===ME,list=S.changes.filter(mine).sort((a,b)=>(b.at||0)-(a.at||0));
+  const owner=myRole()==='owner',mine=seesChange,list=S.changes.filter(c=>isReq(c)&&mine(c)).sort((a,b)=>(b.at||0)-(a.at||0));
+  const sync=S.meta.find(x=>x.id==='daftra-sync');
   const pend=list.filter(c=>c.status==='pending'),done=list.filter(c=>c.status!=='pending').slice(0,150);
   const when=ts=>ts?new Date(ts).toLocaleString('ar',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
   const ST={pending:['prog','بانتظار الاعتماد'],approved:['done','معتمد'],rejected:['low','مرفوض']};
@@ -377,19 +395,22 @@ function vChanges(){
     return `<div class="card" style="display:flex;flex-direction:column;gap:8px;border-inline-start:4px solid ${c.status==='pending'?'var(--warn)':c.status==='approved'?'var(--good)':'var(--bad)'}">
     <div class="sechead" style="margin:0"><b>${c.action==='delete'?'🗑️ حذف':'✏️ تعديل'} · ${esc(COL_LABEL[c.col]||c.col)}${c.source==='daftra'?' · دفترة':''}</b><span class="chip ${ST[c.status][0]}">${ST[c.status][1]}</span></div>
     <span>${esc(c.label||'')}</span>
-    <span class="muted" style="font-size:.85rem">طلبه <b>${esc(c.byName||personName(c.by))}</b> · ${when(c.at)}${c.decidedAt?` · ${c.status==='approved'?'اعتمده':'رفضه'} ${esc(personName(c.decidedBy))} ${when(c.decidedAt)}`:''}${c.self?' · تعديل المدير العام':''}</span>
-    <div style="background:var(--accent-soft);border-radius:8px;padding:8px"><b>السبب:</b> ${esc(c.reason||'—')}</div>
+    <span class="muted" style="font-size:.85rem">${c.source==='daftra'?`انكشف في دفترة · المندوب <b>${esc(c.byName||userName(c.rep))}</b>`:`طلبه <b>${esc(c.byName||personName(c.by))}</b>`} · ${when(c.at)}${c.decidedAt?` · ${c.status==='approved'?'اعتمده':'رفضه'} ${esc(personName(c.decidedBy))} ${when(c.decidedAt)}`:''}${c.self?' · تعديل المدير العام':''}</span>
+    ${(()=>{const R=c.source==='daftra'?reasonFor(c):null,txt=R?R.reason:c.reason;
+      return `<div style="background:${txt?'var(--accent-soft)':'color-mix(in srgb,#e8a33d 18%,transparent)'};border-radius:8px;padding:8px"><b>السبب:</b> ${txt?esc(txt):'<b>لم يُكتب السبب بعد</b>'}${R?` <span class="muted" style="font-size:.82rem">· كتبه ${esc(R.byName||personName(R.by))} ${when(R.at)}</span>`:''}
+      ${c.source==='daftra'&&c.status==='pending'&&(owner||String(c.rep||'')===myRep())?` <button type="button" class="sm" data-reason="${esc(c.id)}">${txt?'تعديل السبب':'✍️ اكتب السبب'}</button>`:''}</div>`})()}
     ${D.length?tbl('<th>الحقل</th><th>قبل</th><th>بعد</th>',D.map(r=>`<tr><td>${esc(r.l)}</td><td class="wrap" style="color:var(--bad)">${esc(r.b)}</td><td class="wrap" style="color:var(--good)"><b>${esc(r.a)}</b></td></tr>`),'',''):c.action==='edit'?'<span class="muted">لا يوجد فرق في البيانات</span>':''}
     ${c.rejectNote?`<div class="note">سبب الرفض: ${esc(c.rejectNote)}</div>`:''}
     ${stale?'<div class="note">تنبيه: هذا السجل تغيّر بعد إرسال الطلب. الاعتماد يكتب فوقه بالقيم الجديدة في الطلب.</div>':''}
     ${owner&&c.status==='pending'?`<div class="actions"><button type="button" class="pri sm" data-chg="${esc(c.id)}" data-ok="1">✓ اعتماد</button><button type="button" class="sm" data-chg="${esc(c.id)}" data-ok="0">✕ رفض</button></div>`:''}</div>`};
-  return `<div class="sechead"><h2>اعتماد التعديلات</h2><span class="sub">${owner?'أي تعديل أو حذف من الموظفين ما يُطبّق إلا بعد اعتمادك':'تعديلاتك وحذفك يحتاج سبب واعتماد المدير العام'}</span></div>
+  return `<div class="sechead"><h2>اعتماد التعديلات</h2><span class="sub">${owner?'أي تعديل أو حذف، في التطبيق أو في دفترة، يحتاج سبب واعتمادك':'تعديلاتك وحذفك، في التطبيق أو في دفترة، يحتاج سبب واعتماد المدير العام'}</span></div>
+  <div class="card actions" style="justify-content:space-between"><span class="muted" style="font-size:.88rem">🔄 بيانات دفترة تتحدّث تلقائيًا كل 10 دقائق${sync&&sync.lastRun?` · آخر تحديث ${when(sync.lastRun)}`:' · لم يتم أول تحديث بعد'}</span>${owner?`<button type="button" class="sm pri" id="syncDaftra">تحديث من دفترة الآن</button>`:''}</div>
   <div class="kpis"><div class="kpi" style="--c:var(--warn)"><span class="lb">بانتظار الاعتماد</span><span class="v">${fmt(pend.length)}</span></div>
     <div class="kpi" style="--c:var(--good)"><span class="lb">معتمد</span><span class="v">${fmt(list.filter(c=>c.status==='approved').length)}</span></div>
     <div class="kpi" style="--c:var(--bad)"><span class="lb">مرفوض</span><span class="v">${fmt(list.filter(c=>c.status==='rejected').length)}</span></div></div>
   <section class="sec"><h3>بانتظار الاعتماد</h3>${pend.length?pend.map(card).join(''):'<p class="muted">لا توجد طلبات معلقة.</p>'}</section>
   <section class="sec"><h3>السجل</h3>${done.length?done.map(card).join(''):'<p class="muted">لا يوجد سجل بعد.</p>'}</section>
-  <div class="note info"><b>تعديلات دفترة:</b> التطبيق ما يقدر يمنع التعديل أو الحذف داخل دفترة نفسها. عشان يكون إجباري هناك بعد، افتح دفترة ← الإعدادات ← الأدوار والصلاحيات، وشِل صلاحية تعديل وحذف الفواتير والمرتجعات والمدفوعات عن كل الأدوار ما عدا المدير العام.</div>`;
+  <div class="note info"><b>تعديلات دفترة:</b> أي فاتورة أو مرتجع أو دفعة تتعدل أو تنحذف في دفترة تطلع هنا تلقائيًا مع قبل وبعد، والمندوب يكتب السبب، والمدير العام يعتمد أو يرفض. الرفض يعني لازم تتصحّح في دفترة، لأن التطبيق ما يغيّر في دفترة. ولمنع التعديل من الأساس: دفترة ← الإعدادات ← الأدوار والصلاحيات، وشِل صلاحية التعديل والحذف عن الموظفين.</div>`;
 }
 function handleErr(e){
   if(e&&(e.code==='42501'||/row-level security/i.test(e.message||''))){toast('صلاحيتك لا تسمح بهذا التعديل');return}
@@ -1113,7 +1134,7 @@ setInterval(()=>{if(LOCKED||mode!=='cloud')return;if(Date.now()-lastAct>idleMin(
 function personName(id){const p=PROFILES.find(x=>x.id===id);return p?(p.name||showLogin(p.email)||'مستخدم'):'مستخدم'}
 function paintAcct(){
   const n=PROFILES.filter(p=>p.role==='none').length,bd=$('#reqBadge');if(bd){bd.hidden=!(n&&myRole()==='owner');bd.textContent=n}
-  {const pc=pendingChanges().filter(c=>myRole()==='owner'||c.by===ME).length,cb=$('#chgBadge');if(cb){cb.hidden=!pc;cb.textContent=pc}}
+  {const pc=pendingChanges().filter(seesChange).length,cb=$('#chgBadge');if(cb){cb.hidden=!pc;cb.textContent=pc}}
   const pl=$('#permLink');if(pl)pl.hidden=myRole()!=='owner';
   if(mode!=='cloud'||!ME){$('#acct').hidden=true;return}const R=myRole();$('#acct').hidden=false;$('#acctName').textContent=personName(ME);$('#acctRole').textContent=R==='owner'?'المالك':R==='none'?'بانتظار الصلاحية':ROLES[R]}
 /* install prompt (Android / desktop Chrome) */
@@ -1302,6 +1323,8 @@ document.addEventListener('click',async e=>{
     if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الحذف';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='حذف'}},3500);return}
     const c0=b.dataset.del,rev=REVIEW_COLS.includes(c0);if(await del(c0,b.dataset.id)&&!rev)toast('تم الحذف'); return;
   }
+  if(b.dataset.reason){await addReason(b.dataset.reason);return}
+  if(b.id==='syncDaftra'){await syncDaftra(b);return}
   if(b.dataset.chg){b.disabled=true;await decideChange(b.dataset.chg,b.dataset.ok==='1');b.disabled=false;return}
   if(b.dataset.setpw){const id=b.dataset.setpw,inp=document.getElementById('np-'+id),pw=inp?inp.value:'';if(pw.length<6){toast('كلمة المرور المؤقتة لازم تكون 6 خانات على الأقل');return}
     b.disabled=true;const {error}=await SB.rpc('owner_set_password',{target:id,pw});b.disabled=false;
