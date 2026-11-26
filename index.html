@@ -617,9 +617,42 @@ function calcCompute(lines){
     const gp=bom.reduce((a,b)=>a+num(b.q),0);prods.push({p,q,gp,g:gp*q,bom,trays:q/T,traysUp:Math.ceil(q/T-1e-9)});
     bom.forEach(b=>{const t=mats[b.m]=mats[b.m]||{id:b.m,g:0};t.g+=num(b.q)*q})});
   prods.sort((a,b)=>b.q-a.q);
+  /* classic / chocolate pieces are covered by the shop recipe, so they are not "without recipe" */
+  for(let k=missing.length-1;k>=0;k--){const p=S.products.find(x=>x.name===missing[k]);if(p&&pieceType(p))missing.splice(k,1)}
   return {orderRows,prods,mats:Object.values(mats).sort((a,b)=>b.g-a.g),missing,T};
 }
 const kg=g=>fmt(+(g/1000).toFixed(3));
+/* ---------- cookie types: every classic / chocolate piece uses the shop recipe (grams for a 50 g piece, scaled by the piece size in its name) ---------- */
+const CK_TYPES={classic:'كلاسيك',choc:'شوكلت'};
+const CK_ING=[['d','العجين'],['g','الجالكسي'],['h','الهرشي']];
+const CK_PACK={g:{w:720,n:'علبة'},h:{w:1000,n:'كيس'},d:null};
+function ckRecipe(){const s=S.meta.find(x=>x.id==='settings')||{},r=s.recipe||{},def={h:13,d:33,g:6};
+  return {classic:{...def,...(r.classic||{})},choc:{...def,...(r.choc||{})}}}
+function pieceType(p){const n=String(p&&p.name||'');if(/عرض|بوكس|بايتس/.test(n))return null;
+  if(/شوك|shukilit|choc/i.test(n))return 'choc';if(/كلاسي|kilasik|classic/i.test(n))return 'classic';return null}
+const pieceSize=p=>{const m=String(p&&p.name||'').match(/(\d+(?:\.\d+)?)\s*(?:جرام|جم|غرام|jiram|g\b)/i);return m?num(m[1]):50};
+/* lines -> pieces per type, trays per type, grams of dough / galaxy / hershey */
+function cookieSummary(lines){const T=traySize(),R=ckRecipe(),t={classic:{q:0,f:0,sizes:{}},choc:{q:0,f:0,sizes:{}}};
+  lines.forEach(l=>{const p=byId('products',l.p),q=num(l.q);if(!p||q<=0)return;
+    const cont=(p.contents||[]).filter(c=>c.p&&num(c.n)>0),parts=cont.length?cont.map(c=>[byId('products',c.p),q*num(c.n)]):[[p,q]];
+    parts.forEach(([bp,n])=>{const k=pieceType(bp);if(!k||!n)return;const sz=pieceSize(bp);t[k].q+=n;t[k].f+=n*sz/50;t[k].sizes[sz]=(t[k].sizes[sz]||0)+n})});
+  const ing={d:0,g:0,h:0};Object.keys(t).forEach(k=>{t[k].trays=Math.ceil(t[k].q/T-1e-9);CK_ING.forEach(([i])=>{const g=t[k].f*num(R[k][i]);t[k][i]=g;ing[i]+=g})});
+  return {t,ing,T,R,pieces:t.classic.q+t.choc.q,trays:t.classic.trays+t.choc.trays}}
+function cookieBlock(lines,editable){const C=cookieSummary(lines);if(!C.pieces)return '';
+  const sizes=k=>{const e=Object.entries(C.t[k].sizes);return e.length>1||(e[0]&&+e[0][0]!==50)?e.map(([s,n])=>`${fmt(n)} × ${fmt(s)}جم`).join(' · '):''};
+  const pk=i=>CK_PACK[i]?` · ${fmt(Math.ceil(C.ing[i]/CK_PACK[i].w-1e-9))} ${CK_PACK[i].n} (${fmt(CK_PACK[i].w)} جم)`:'';
+  return `<section class="sec"><h3>الكلاسيك والشوكلت</h3>
+  <div class="kpis"><div class="kpi" style="--c:var(--s1)"><span class="lb">${ic('orders')}حبات الكلاسيك</span><span class="v">${fmt(C.t.classic.q)}</span><span class="s">${fmt(C.t.classic.trays)} صينية${sizes('classic')?' · '+sizes('classic'):''}</span></div>
+    <div class="kpi" style="--c:var(--s2)"><span class="lb">${ic('orders')}حبات الشوكلت</span><span class="v">${fmt(C.t.choc.q)}</span><span class="s">${fmt(C.t.choc.trays)} صينية${sizes('choc')?' · '+sizes('choc'):''}</span></div>
+    <div class="kpi" style="--c:var(--s3)"><span class="lb">${ic('orders')}عدد الصواني</span><span class="v">${fmt(C.trays)}</span><span class="s">${fmt(C.T)} حبة للصينية · كل نوع على صوانيه</span></div></div>
+  <div class="kpis">${CK_ING.map(([i,n])=>`<div class="kpi" style="--c:var(--accent)"><span class="lb">${ic('issue')}وزن ${n}</span><span class="v">${kg(C.ing[i])} كجم</span><span class="s">${fmt(Math.round(C.ing[i]))} جم${pk(i)}</span></div>`).join('')}</div>
+  ${tbl('<th>النوع</th><th class="n">الحبات</th><th class="n">الصواني</th>'+CK_ING.map(([,n])=>`<th class="n">${n} كجم</th>`).join(''),Object.keys(CK_TYPES).filter(k=>C.t[k].q).map(k=>`<tr><td><b>${CK_TYPES[k]}</b></td><td class="n">${fmt(C.t[k].q)}</td><td class="n">${fmt(C.t[k].trays)}</td>${CK_ING.map(([i])=>`<td class="n">${kg(C.t[k][i])}</td>`).join('')}</tr>`),`<td>الإجمالي</td><td class="n">${fmt(C.pieces)}</td><td class="n">${fmt(C.trays)}</td>${CK_ING.map(([i])=>`<td class="n">${kg(C.ing[i])}</td>`).join('')}`,'')}
+  <span class="muted" style="font-size:.82rem">تركيبة حبة 50 جرام: ${Object.keys(CK_TYPES).map(k=>`${CK_TYPES[k]}: ${CK_ING.map(([i,n])=>`${n.replace('ال','')} ${fmt(C.R[k][i])}`).join(' + ')} جم`).join(' · ')}. الحبات الأكبر أو الأصغر تُحسب بنسبة وزنها.</span>
+  ${editable?`<details><summary class="muted" style="cursor:pointer">تعديل التركيبة</summary><div class="actions" style="margin-top:8px;flex-wrap:wrap">${Object.keys(CK_TYPES).map(k=>`<b style="min-width:50px">${CK_TYPES[k]}</b>${CK_ING.map(([i,n])=>`<label class="muted" style="font-size:.85rem">${n.replace('ال','')} <input id="rc-${k}-${i}" type="number" min="0" step="any" value="${C.R[k][i]}" style="width:70px" inputmode="decimal"> جم</label>`).join('')}`).join('<span style="flex-basis:100%"></span>')}<button type="button" class="sm pri" id="saveRecipe">حفظ التركيبة</button></div></details>`:''}
+  </section>`}
+async function saveRecipe(){const s=S.meta.find(x=>x.id==='settings')||{id:'settings'},r={};
+  Object.keys(CK_TYPES).forEach(k=>{r[k]={};CK_ING.forEach(([i])=>{const e=document.getElementById(`rc-${k}-${i}`);r[k][i]=num(e&&e.value)})});
+  if(await put('meta',{...s,recipe:r}))toast('تم حفظ التركيبة')}
 /* ---------- monthly targets per rep: net sales incl. VAT (sales − returns) and customer collections ---------- */
 const monthKey=()=>day.slice(0,7);
 const targetsDoc=()=>S.targets.find(x=>x.id==='t-'+monthKey())||null;
@@ -722,6 +755,7 @@ function calcPanel(){
   const totQ=(c.lines||[]).reduce((a,l)=>a+num(l.q),0),pcs=snap.prods.reduce((a,x)=>a+x.q,0),trays=snap.prods.reduce((a,x)=>a+x.trays,0),totG=snap.mats.reduce((a,m)=>a+m.g,0);
   const G={};(c.detail||[]).forEach(d=>{(G[d.repName]=G[d.repName]||[]).push(d)});
   const isBox=id=>{const p=byId('products',id);return p&&(p.contents||[]).length};
+  const miss=(snap.missing||[]).filter(n=>!pieceType(S.products.find(x=>x.name===n)||{name:n})),ck=cookieBlock(c.lines||[],false);
   return `<section class="sec card" style="gap:14px;border:2px solid ${appr?'var(--good)':'var(--warn)'}">
     <div class="sechead"><h2>حسبة الإنتاج · ${esc(dayLabel(day))}</h2>
       <div class="actions"><span class="chip ${appr?'done':'prog'}">${appr?'معتمدة':'بانتظار الاعتماد'}</span>
@@ -729,11 +763,12 @@ function calcPanel(){
       ${canDo('issues')?`<button type="button" class="sm" id="calcToIssue">صرف المواد</button>`:''}
       <button type="button" class="sm" id="calcLoad">فتح في الحاسبة</button></div></div>
     <span class="muted" style="font-size:.85rem">حوّلها ${esc(personName(c.transferredBy))} · ${when(c.transferredAt)}${appr?` · اعتمدها <b>${esc(personName(c.approvedBy))}</b> · ${when(c.approvedAt)}`:''}${c.excluded?` · ${fmt(c.excluded)} طلب متأخر غير معتمد لم يدخل`:''}</span>
-    ${snap.missing&&snap.missing.length?`<div class="note">أصناف بلا تركيبة لم تدخل في حساب المواد: ${esc(snap.missing.join('، '))}</div>`:''}
+    ${miss.length?`<div class="note">أصناف بلا تركيبة لم تدخل في حساب المواد: ${esc(miss.join('، '))}</div>`:''}
     <div class="kpis"><div class="kpi"><span class="lb">${ic('orders')}إجمالي الطلب</span><span class="v">${fmt(totQ)}</span><span class="s">${fmt((c.lines||[]).length)} صنف</span></div>
-      <div class="kpi"><span class="lb">${ic('orders')}الحبات</span><span class="v">${fmt(pcs)}</span></div>
-      <div class="kpi"><span class="lb">${ic('orders')}الصواني</span><span class="v">${fmt(trays)}</span><span class="s">${fmt(snap.tray)} حبة للصينية</span></div>
-      <div class="kpi"><span class="lb">${ic('issue')}وزن المواد</span><span class="v">${kg(totG)} كجم</span></div></div>
+      <div class="kpi"><span class="lb">${ic('orders')}الحبات</span><span class="v">${fmt(pcs)}</span><span class="s">بعد تفكيك البوكسات</span></div>
+      ${ck?'':`<div class="kpi"><span class="lb">${ic('orders')}الصواني</span><span class="v">${fmt(trays)}</span><span class="s">${fmt(snap.tray)} حبة للصينية</span></div>
+      <div class="kpi"><span class="lb">${ic('issue')}وزن المواد</span><span class="v">${kg(totG)} كجم</span></div>`}</div>
+    ${ck}
     <h3>الإجمالي</h3>
     ${tbl('<th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th>',(c.lines||[]).map(l=>`<tr><td>${esc(pName(l.p))}</td><td class="n"><b>${fmt(l.q)}</b></td><td>${isBox(l.p)?'بوكس':'حبة'}</td></tr>`),`<td>الإجمالي</td><td class="n">${fmt(totQ)}</td><td></td>`,'')}
     <div class="grid2"><section class="sec"><h3>الحبات والصواني</h3>${tbl('<th>نوع الحبة</th><th class="n">الحبات</th><th class="n">الصواني</th><th class="n">الوزن كجم</th>',snap.prods.map(x=>`<tr><td>${esc(pName(x.p))}</td><td class="n">${fmt(x.q)}</td><td class="n"><b>${fmt(x.trays)}</b></td><td class="n">${kg(x.g)}</td></tr>`),snap.prods.length?`<td>الإجمالي</td><td class="n">${fmt(pcs)}</td><td class="n">${fmt(trays)}</td><td class="n">${kg(totG)}</td>`:'','')}</section>
@@ -755,6 +790,7 @@ function vCalc(){
   <div class="kpi" style="--c:var(--s2)"><span class="lb">${ic('orders')}عدد الصواني</span><span class="v">${fmt(trays)}</span><span class="s">${R.T} حبة للصينية · كل نوع على صوانيه</span></div>
   <div class="kpi" style="--c:var(--accent)"><span class="lb">${ic('issue')}الوزن الإجمالي</span><span class="v">${kg(totG)} كجم</span><span class="s">${fmt(totG)} جرام</span></div>
   <div class="kpi" style="--c:var(--s3)"><span class="lb">${ic('issue')}عدد المواد</span><span class="v">${fmt(R.mats.length)}</span></div></div>
+  ${cookieBlock(draft.calc.filter(l=>l.p),canDo('meta'))}
   <section class="sec calcres"><h3>المواد المطلوبة</h3>
   ${tbl('<th>المادة</th><th class="n">الإجمالي بالجرام</th><th class="n">الإجمالي بالكيلو</th><th>العبوة</th><th class="n">عدد العبوات</th><th class="n">يُصرف (تقريب لأعلى)</th>',R.mats.map(m=>{const M=byId('materials',m.id),pk=M&&num(M.pack),pn=(M&&M.packName)||'عبوة';return `<tr><td>${esc(mName(m.id))}</td><td class="n">${fmt(+m.g.toFixed(2))}</td><td class="n"><b>${kg(m.g)}</b></td><td>${pk?`${esc(pn)} ${fmt(pk)} جم`:`<span class="muted">لم يُحدد وزن العبوة</span>`}</td><td class="n">${pk?fmt(+(m.g/pk).toFixed(2)):'—'}</td><td class="n">${pk?`<b>${fmt(Math.ceil(m.g/pk-1e-9))}</b> ${esc(pn)}`:'—'}</td></tr>`}),R.mats.length?`<td>الإجمالي</td><td class="n">${fmt(+totG.toFixed(2))}</td><td class="n">${kg(totG)}</td><td colspan="3"></td>`:'','أضف صنفًا له تركيبة وعدد قطع لعرض المواد المطلوبة.')}</section>
   <section class="sec"><h3>الحبات والصواني حسب النوع</h3>
@@ -1171,6 +1207,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.status){const o=byId('orders',t.dataset.status);if(o&&o.status!==t.value)put('orders',{...o,status:t.value})}
   if(t.dataset.pf){const k=t.dataset.k,v=k==='name'?t.value.trim():t.value;saveProfile(t.dataset.pf,{[k]:k==='rep'?(v||null):v});return}
   if(t.id==='idle'){const s=settingsDoc();put('meta',{...s,id:'settings',idle:num(t.value)}).then(ok=>{if(ok)toast('تم حفظ مهلة الخروج')});return}
+  if(t.id&&t.id.startsWith('rc-'))return;
   if(t.id==='tray'){const n=Math.round(num(t.value));if(n>0&&n!==traySize()){const s=S.meta.find(x=>x.id==='settings')||{id:'settings'};put('meta',{...s,tray:n}).then(ok=>{if(ok)toast('عدد الحبات في الصينية: '+n)})}}
   if(t.id==='rep-f'||t.id==='rep-t'){draft.repFrom=val('rep-f');draft.repTo=val('rep-t');render()}
 });
@@ -1211,6 +1248,7 @@ document.addEventListener('click',async e=>{
   if(b.id==='iprodFromOrders'){const F=orderFile(onDay('orders',day));if(!F.rows.length){toast('لا توجد طلبات في ملف هذا اليوم');return}draft.issueProds=F.rows.map(r=>({p:r.id,q:String(r.q)}));reindex('ip');issueFromProds();render();toast('تم تحميل طلبات اليوم وحساب المواد');return}
   if(b.id==='addCalc'){draft.calc.push({p:'',q:''});render();return}
   if(b.dataset.rmcalc!==undefined){draft.calc.splice(+b.dataset.rmcalc,1);if(!draft.calc.length)draft.calc=[{p:'',q:''}];reindex('cl');render();return}
+  if(b.id==='saveRecipe'){b.disabled=true;await saveRecipe();b.disabled=false;return}
   if(b.id==='saveTargets'){b.disabled=true;await saveTargets();b.disabled=false;return}
   if(b.id==='toCalc'){b.disabled=true;await transferToCalc();b.disabled=false;return}
   if(b.id==='approveCalc'){if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الاعتماد';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='اعتماد الحسبة'}},4000);return}b.disabled=true;await approveCalc();return}
