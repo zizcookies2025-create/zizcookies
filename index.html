@@ -250,7 +250,8 @@ function byUser(s,r,c){const U={};const g=u=>U[u]=U[u]||{u,sv:0,rv:0,sn:0,rn:0,c
   r.forEach(x=>{const o=g(x.user||'');o.rv+=gval(x);o.rn+=nval(x)});
   c.forEach(x=>{g(x.user||'').cv+=num(x.amount)});
   new Set(s.map(x=>(x.user||'')+'|'+x.invoice)).forEach(k=>{g(k.split('|')[0]).n++});
-  return Object.values(U).filter(x=>x.sv||x.rv||x.cv||x.n).sort((a,b)=>(b.sv-b.rv)-(a.sv-a.rv))}
+  const sellers=new Set(S.sales.map(x=>String(x.user||'')));
+  return Object.values(U).filter(x=>sellers.has(String(x.u))&&(x.sv||x.rv||x.cv||x.n)).sort((a,b)=>(b.sv-b.rv)-(a.sv-a.rv))}
 function userTable(rows){const S2=f=>fmt(rows.reduce((a,x)=>a+f(x),0));return tbl('<th>المستخدم</th><th class="n">فواتير</th><th class="n">المبيعات شامل الضريبة</th><th class="n">المرتجعات شامل الضريبة</th><th class="n">الصافي شامل الضريبة</th><th class="n">الصافي بدون الضريبة</th><th class="n">التحصيلات</th><th class="n">نسبة التحصيل</th>',rows.map(x=>`<tr><td>${esc(userName(x.u))}</td><td class="n">${fmt(x.n)}</td><td class="n">${fmt(x.sv)}</td><td class="n">${fmt(x.rv)}</td><td class="n">${fmt(x.sv-x.rv)}</td><td class="n">${fmt(x.sn-x.rn)}</td><td class="n">${fmt(x.cv)}</td><td class="n">${ratioCell(x.cv,x.sv-x.rv)}</td></tr>`),rows.length?`<td>الإجمالي</td><td class="n">${S2(x=>x.n)}</td><td class="n">${S2(x=>x.sv)}</td><td class="n">${S2(x=>x.rv)}</td><td class="n">${S2(x=>x.sv-x.rv)}</td><td class="n">${S2(x=>x.sn-x.rn)}</td><td class="n">${S2(x=>x.cv)}</td><td class="n">${ratioCell(rows.reduce((a,x)=>a+x.cv,0),rows.reduce((a,x)=>a+x.sv-x.rv,0))}</td>`:'','لا توجد حركة.')}
 const pName=id=>{const p=byId('products',id);return p?p.name:(NAMES[id]||'صنف محذوف')};
 const KIND={raw:'مادة خام',aux:'مادة مساعدة'};
@@ -620,7 +621,10 @@ const kg=g=>fmt(+(g/1000).toFixed(3));
 /* ---------- monthly targets per rep: net sales incl. VAT (sales − returns) and customer collections ---------- */
 const monthKey=()=>day.slice(0,7);
 const targetsDoc=()=>S.targets.find(x=>x.id==='t-'+monthKey())||null;
-function repIds(){const m=S.meta.find(x=>x.id==='users');let ids=m&&m.users?Object.keys(m.users).filter(k=>k!=='0'):[];if(myRole()==='rep')ids=ids.filter(k=>k===String((MYPROFILE&&MYPROFILE.rep)||''));return ids}
+/* only reps who have at least one sales record appear in targets, sales and collections */
+function repIds(){const m=S.meta.find(x=>x.id==='users');let ids=m&&m.users?Object.keys(m.users).filter(k=>k!=='0'):[];
+  if(myRole()==='rep')return ids.filter(k=>k===String((MYPROFILE&&MYPROFILE.rep)||''));
+  const sellers=new Set(S.sales.map(x=>String(x.user||'')));return ids.filter(k=>sellers.has(k))}
 /* working week: 6 days, Friday off */
 const isWorkDay=iso=>new Date(iso+'T12:00:00').getDay()!==5;
 function targetStats(){
