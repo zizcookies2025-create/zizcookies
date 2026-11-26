@@ -150,6 +150,9 @@ td.n,th.n{text-align:end}
 .ro{opacity:.6;pointer-events:none}
 html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0;font-size:14px}
+[hidden]{display:none!important}
+.tbar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;min-width:90px}
+.tbar>i{display:block;height:100%;border-radius:99px}
 .linkbtn{background:none;border:0;color:var(--accent);padding:4px;cursor:pointer;font:inherit;text-decoration:underline}
 .lockbody input[type=email],.lockbody input[type=text]{font-size:1rem;text-align:start;direction:ltr}
 .lockbody input.pin{font-size:1.05rem;letter-spacing:normal;text-align:start}
@@ -185,6 +188,7 @@ body{margin:0;font-size:14px}
     <a href="#collections">التحصيلات</a>
     <a href="#items">الأصناف والمواد</a>
     <a href="#calc" class="navcalc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/></svg>حاسبة الإنتاج</a>
+    <a href="#targets" class="navcalc"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>الأهداف الشهرية</a>
     <a href="#charts">الرسوم البيانية</a>
     <a href="#report">التقارير</a>
     <a href="#users" hidden class="navcalc"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 13.8c2.1.8 3.5 2.9 3.5 5.2"/></svg>المستخدمون والصلاحيات<span class="chip prog" id="reqBadge" hidden></span></a>
@@ -199,15 +203,15 @@ body{margin:0;font-size:14px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
-const COLS=['products','materials','orders','issues','sales','returns','collections','meta','calcs'];
-const S={products:[],materials:[],orders:[],issues:[],sales:[],returns:[],collections:[],meta:[],calcs:[]};
+const COLS=['products','materials','orders','issues','sales','returns','collections','meta','calcs','targets'];
+const S={products:[],materials:[],orders:[],issues:[],sales:[],returns:[],collections:[],meta:[],calcs:[],targets:[]};
 let PROFILES=[],MYPROFILE=null,SB=null;
 /* ---------- roles: the owner holds everything; each person gets one role assigned by the owner ---------- */
 const ROLES={admin:'مدير (كل الصلاحيات)',production:'الإنتاج',rep:'مندوب',accounting:'المحاسبة',viewer:'مشاهدة فقط'};
-const ROLE_DESC={admin:'كل التبويبات وكل العمليات ما عدا إدارة الصلاحيات',production:'الطلبات واعتماد المتأخر منها، صرف المواد، حاسبة الإنتاج، عرض الأصناف',rep:'تسجيل طلباته هو فقط، وعرض ملخص اليوم وحاسبة الإنتاج',accounting:'المبيعات والمرتجعات والتحصيلات والرسوم البيانية والتقارير',viewer:'يشوف كل شيء بدون أي تعديل'};
-const ROLE_TABS={owner:'*',admin:'*',production:['today','orders','issues','calc','items','charts'],rep:['today','orders','calc'],accounting:['today','sales','returns','collections','charts','report'],viewer:['today','orders','issues','sales','returns','collections','calc','items','charts','report'],none:[]};
-const ROLE_WRITE={owner:'*',admin:['orders','approve','issues','returns','collections','items','calc','sales'],production:['orders','approve','issues','calc'],rep:['orders'],accounting:['returns','collections'],viewer:[],none:[]};
-const COL_KEY={orders:'orders',issues:'issues',sales:'sales',returns:'returns',collections:'collections',products:'items',materials:'items',meta:'calc',calcs:'approve'};
+const ROLE_DESC={admin:'كل التبويبات وكل العمليات ما عدا إدارة الصلاحيات',production:'الطلبات واعتماد المتأخر منها، صرف المواد، حاسبة الإنتاج، عرض الأصناف',rep:'يشوف ويسجّل طلباته هو فقط، ويشوف مبيعاته ومرتجعات وتحصيلات عملائه فقط، بدون بيانات باقي المناديب',accounting:'المبيعات والمرتجعات والتحصيلات والرسوم البيانية والتقارير',viewer:'يشوف كل شيء بدون أي تعديل'};
+const ROLE_TABS={owner:'*',admin:'*',production:['today','orders','issues','calc','items','charts'],rep:['today','orders','sales','returns','collections','targets'],accounting:['today','sales','returns','collections','targets','charts','report'],viewer:['today','orders','issues','sales','returns','collections','targets','calc','items','charts','report'],none:[]};
+const ROLE_WRITE={owner:'*',admin:['orders','approve','issues','returns','collections','items','calc','sales','targets'],production:['orders','approve','issues','calc'],rep:['orders'],accounting:['returns','collections'],viewer:[],none:[]};
+const COL_KEY={orders:'orders',issues:'issues',sales:'sales',returns:'returns',collections:'collections',products:'items',materials:'items',meta:'calc',calcs:'approve',targets:'targets'};
 let IS_OWNER=false,MYEMAIL='';
 const lc=s=>String(s||'').trim().toLowerCase();
 /* role and linked rep come from the signed-in user's profile row */
@@ -273,7 +277,11 @@ function materialBalance(id){
 
 /* ---------- storage: Supabase table public.docs (col,id,data) ---------- */
 const RAW={};COLS.forEach(c=>RAW[c]=new Map());
-function rebuild(col){S[col]=expand([...RAW[col].values()])}
+/* a rep sees only rows that belong to the Daftra rep linked to their account */
+const REP_SCOPED=['sales','returns','collections','orders'];
+function rebuild(col){let rows=expand([...RAW[col].values()]);
+  if(REP_SCOPED.includes(col)&&myRole()==='rep'){const r=String((MYPROFILE&&MYPROFILE.rep)||'');rows=r?rows.filter(x=>String(x.user||'')===r):[]}
+  S[col]=rows}
 function applyRow(r,removed){if(!r||!RAW[r.col])return;if(removed)RAW[r.col].delete(r.id);else RAW[r.col].set(r.id,{...r.data,id:r.id,_by:r.created_by});rebuild(r.col)}
 async function loadAll(){
   COLS.forEach(c=>RAW[c].clear());let from=0;const step=1000;
@@ -351,7 +359,7 @@ function render(){
   if(ready&&!canTab(view)){const first=[...document.querySelectorAll('#tabs a')].find(a=>!a.hidden);if(first){view=first.getAttribute('href').slice(1);history.replaceState(null,'','#'+view);return render()}}
   const roleLbl=R==='owner'?'المالك · كل الصلاحيات':R==='none'?'بدون صلاحية بعد':ROLES[R];
   $('#mode').textContent=mode==='loading'?'جارٍ تحميل البيانات…':mode==='cloud'?(canWrite?'البيانات مشتركة مع فريقك · '+roleLbl:'عرض فقط · لا تملك صلاحية التعديل'):'وضع محلي · البيانات محفوظة في هذا المتصفح فقط';
-  const V={today:vToday,orders:vOrders,issues:vIssues,sales:vSales,returns:vReturns,collections:vCollections,items:vItems,charts:vCharts,calc:vCalc,report:vReport,users:vUsers}[view]||vToday;
+  const V={today:vToday,orders:vOrders,issues:vIssues,sales:vSales,returns:vReturns,collections:vCollections,items:vItems,charts:vCharts,calc:vCalc,report:vReport,users:vUsers,targets:vTargets}[view]||vToday;
   let h='';
   if(note) h+=`<div class="note">${esc(note)}</div>`;
   if(ready&&R==='none') h+=`<div class="card" style="text-align:center;padding:40px 16px"><h2>أهلًا بك في نظام زيزكوكيز</h2><p class="muted">تم إنشاء حسابك وتسجيل دخولك. بانتظار أن يحدد لك مدير النظام صلاحيتك، وبعدها تظهر لك التبويبات الخاصة بك تلقائيًا.</p></div>`;
@@ -374,7 +382,7 @@ function vToday(){
   const lines=is.flatMap(i=>i.lines||[]);
   const done=o.filter(x=>x.status==='done').length;
   let h=noItems()+`<div class="sechead"><h2>${esc(dayLabel(day))}</h2><span class="sub">ملخص حركة اليوم</span></div>
-  ${mtdTiles()}
+  ${mtdTiles()}${targetCards()}
   <div class="kpis">
     <div class="kpi"><span class="lb">${ic('orders')}الطلبات</span><span class="v">${fmt(o.length)}</span><span class="s">${fmt(oq)} وحدة · ${fmt(done)} مكتمل</span></div>
     <div class="kpi"><span class="lb">${ic('issue')}أذونات صرف المواد</span><span class="v">${fmt(is.length)}</span><span class="s">${fmt(lines.length)} بند مصروف</span></div>
@@ -609,6 +617,51 @@ function calcCompute(lines){
   return {orderRows,prods,mats:Object.values(mats).sort((a,b)=>b.g-a.g),missing,T};
 }
 const kg=g=>fmt(+(g/1000).toFixed(3));
+/* ---------- monthly targets per rep: net sales incl. VAT (sales − returns) and customer collections ---------- */
+const monthKey=()=>day.slice(0,7);
+const targetsDoc=()=>S.targets.find(x=>x.id==='t-'+monthKey())||null;
+function repIds(){const m=S.meta.find(x=>x.id==='users');let ids=m&&m.users?Object.keys(m.users).filter(k=>k!=='0'):[];if(myRole()==='rep')ids=ids.filter(k=>k===String((MYPROFILE&&MYPROFILE.rep)||''));return ids}
+function targetStats(){
+  const mk=monthKey(),days=monthDays(day),f=days[0],to=days[days.length-1],t=todayISO();
+  const totalDays=days.length,elapsed=mk<t.slice(0,7)?totalDays:mk>t.slice(0,7)?0:+t.slice(8),left=Math.max(0,totalDays-elapsed);
+  const s=inRange('sales',f,to),r=inRange('returns',f,to),c=inRange('collections',f,to),T=targetsDoc()||{};
+  return {mk,totalDays,elapsed,left,rows:repIds().map(id=>{const mine=x=>String(x.user||'')===id;
+    const net=s.filter(mine).reduce((a,x)=>a+gval(x),0)-r.filter(mine).reduce((a,x)=>a+gval(x),0),col=c.filter(mine).reduce((a,x)=>a+num(x.amount),0);
+    const ts=num((T.sales||{})[id]),tc=num((T.coll||{})[id]);
+    return {id,net,col,ts,tc,ps:ts?net/ts*100:null,pc:tc?col/tc*100:null,proj:elapsed?net/elapsed*totalDays:0,needS:left&&ts>net?(ts-net)/left:0,needC:left&&tc>col?(tc-col)/left:0}})};
+}
+const pctTone=p=>p==null?'':p>=100?'var(--good)':p>=70?'var(--accent)':p>=40?'var(--warn)':'var(--bad)';
+const pctLabel=p=>p==null?'—':p>=100?'تحقق الهدف':p>=70?'قريب':p>=40?'متوسط':'متأخر';
+const bar=p=>p==null?'<span class="muted">لم يُحدد هدف</span>':`<div class="tbar" title="${fmt(p)}%"><i style="width:${Math.min(100,p).toFixed(1)}%;background:${pctTone(p)}"></i></div><span style="font-size:.82rem"><b>${fmt(Math.round(p))}%</b> · ${pctLabel(p)}</span>`;
+function targetCards(){const st=targetStats();if(!st.rows.some(x=>x.ts||x.tc))return '';
+  return `<section class="sec"><div class="sechead"><h3>${ic('net')}الأهداف الشهرية</h3><span class="sub"><a href="#targets">التفاصيل</a> · مضى ${fmt(st.elapsed)} من ${fmt(st.totalDays)} يوم</span></div>
+  <div class="kpis">${st.rows.filter(x=>x.ts||x.tc).map(x=>`<div class="kpi" style="gap:6px"><span class="lb">${esc(userName(x.id))}</span>
+    <span class="muted" style="font-size:.78rem">المبيعات ${fmt(x.net)} من ${fmt(x.ts)}</span>${bar(x.ps)}
+    ${x.tc?`<span class="muted" style="font-size:.78rem">التحصيل ${fmt(x.col)} من ${fmt(x.tc)}</span>${bar(x.pc)}`:''}</div>`).join('')}</div></section>`}
+function vTargets(){
+  const st=targetStats(),edit=canDo('targets'),T=targetsDoc()||{};
+  let mlabel=st.mk;try{mlabel=new Date(st.mk+'-15T12:00:00').toLocaleDateString('ar',{month:'long',year:'numeric'})}catch(e){}
+  const sum=f=>st.rows.reduce((a,x)=>a+f(x),0),TS=sum(x=>x.ts),TC=sum(x=>x.tc),NS=sum(x=>x.net),NC=sum(x=>x.col);
+  return `<div class="sechead"><h2>الأهداف الشهرية · ${esc(mlabel)}</h2><span class="sub">مضى ${fmt(st.elapsed)} من ${fmt(st.totalDays)} يوم · المتبقي ${fmt(st.left)} يوم · المبيعات = صافي شامل الضريبة بعد المرتجعات</span></div>
+  ${myRole()!=='rep'&&(TS||TC)?`<div class="kpis big"><div class="kpi" style="--c:var(--s1)"><span class="lb">${ic('sales')}إجمالي هدف المبيعات</span><span class="v">${fmt(NS)}</span><span class="s">من ${fmt(TS)}</span>${bar(TS?NS/TS*100:null)}</div>
+    <div class="kpi" style="--c:var(--s3)"><span class="lb">${ic('collect')}إجمالي هدف التحصيل</span><span class="v">${fmt(NC)}</span><span class="s">من ${fmt(TC)}</span>${bar(TC?NC/TC*100:null)}</div></div>`:''}
+  ${myRole()==='rep'&&!st.rows.length?`<div class="note">حسابك غير مربوط بمندوب في دفترة. اطلب من مدير النظام ربطه من تبويب الصلاحيات.</div>`:''}
+  <section class="sec"><div class="sechead"><h3>تقدم المناديب</h3>${edit?`<span class="sub">اكتب الهدف في الخانات ثم اضغط حفظ الأهداف</span>`:''}</div>
+  ${tbl(`<th>المندوب</th><th class="n">هدف المبيعات</th><th class="n">المحقق</th><th style="min-width:150px">الإنجاز</th><th class="n">المطلوب يوميًا</th><th class="n">المتوقع آخر الشهر</th><th class="n">هدف التحصيل</th><th class="n">المحصّل</th><th style="min-width:150px">الإنجاز</th>`,
+    st.rows.map(x=>`<tr><td><b>${esc(userName(x.id))}</b></td>
+      <td class="n">${edit?`<input id="tg-s-${esc(x.id)}" type="number" min="0" step="any" value="${x.ts||''}" placeholder="0" style="width:110px" inputmode="decimal">`:fmt(x.ts)}</td>
+      <td class="n">${fmt(x.net)}</td><td>${bar(x.ps)}</td>
+      <td class="n">${x.needS?fmt(Math.round(x.needS)):'—'}</td>
+      <td class="n">${x.proj?`${fmt(Math.round(x.proj))}${x.ts?` <span class="chip ${x.proj>=x.ts?'done':'prog'}">${x.proj>=x.ts?'على المسار':'أقل من الهدف'}</span>`:''}`:'—'}</td>
+      <td class="n">${edit?`<input id="tg-c-${esc(x.id)}" type="number" min="0" step="any" value="${x.tc||''}" placeholder="0" style="width:110px" inputmode="decimal">`:fmt(x.tc)}</td>
+      <td class="n">${fmt(x.col)}</td><td>${bar(x.pc)}</td></tr>`),
+    st.rows.length>1?`<td>الإجمالي</td><td class="n">${fmt(TS)}</td><td class="n">${fmt(NS)}</td><td>${bar(TS?NS/TS*100:null)}</td><td></td><td></td><td class="n">${fmt(TC)}</td><td class="n">${fmt(NC)}</td><td>${bar(TC?NC/TC*100:null)}</td>`:'','لا يوجد مناديب.')}
+  ${edit?`<div class="actions"><button type="button" class="pri sm" id="saveTargets">حفظ الأهداف</button>${T.updatedAt?`<span class="muted" style="font-size:.82rem">آخر تعديل ${new Date(T.updatedAt).toLocaleString('ar',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:''}</div>`:''}</section>
+  <div class="note info">المتوقع آخر الشهر = المحقق ÷ الأيام الماضية × أيام الشهر. المطلوب يوميًا = المتبقي من الهدف ÷ الأيام المتبقية. لتحديد أهداف شهر آخر غيّر "يوم العمل" أعلى الصفحة.</div>`;
+}
+async function saveTargets(){const T=targetsDoc()||{id:'t-'+monthKey(),month:monthKey()},sales={...(T.sales||{})},coll={...(T.coll||{})};
+  repIds().forEach(id=>{const a=document.getElementById('tg-s-'+id),b=document.getElementById('tg-c-'+id);if(a)sales[id]=num(a.value);if(b)coll[id]=num(b.value)});
+  if(await put('targets',{...T,id:'t-'+monthKey(),month:monthKey(),sales,coll}))toast('تم حفظ الأهداف')}
 /* ---------- production calculation: the day's approved orders transferred as one document, then approved by production ---------- */
 const calcDoc=d=>S.calcs.find(x=>x.id==='calc-'+d);
 async function transferToCalc(){
@@ -1050,6 +1103,7 @@ document.addEventListener('click',async e=>{
   if(b.id==='iprodFromOrders'){const F=orderFile(onDay('orders',day));if(!F.rows.length){toast('لا توجد طلبات في ملف هذا اليوم');return}draft.issueProds=F.rows.map(r=>({p:r.id,q:String(r.q)}));reindex('ip');issueFromProds();render();toast('تم تحميل طلبات اليوم وحساب المواد');return}
   if(b.id==='addCalc'){draft.calc.push({p:'',q:''});render();return}
   if(b.dataset.rmcalc!==undefined){draft.calc.splice(+b.dataset.rmcalc,1);if(!draft.calc.length)draft.calc=[{p:'',q:''}];reindex('cl');render();return}
+  if(b.id==='saveTargets'){b.disabled=true;await saveTargets();b.disabled=false;return}
   if(b.id==='toCalc'){b.disabled=true;await transferToCalc();b.disabled=false;return}
   if(b.id==='approveCalc'){if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الاعتماد';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='اعتماد الحسبة'}},4000);return}b.disabled=true;await approveCalc();return}
   if(b.id==='calcLoad'){const c=calcDoc(day);if(!c)return;draft.calc=c.lines.map(l=>({p:l.p,q:String(l.q)}));reindex('cl');render();setTimeout(()=>{const el=document.getElementById('cl-p-0');if(el)el.scrollIntoView({block:'center'})},50);return}
