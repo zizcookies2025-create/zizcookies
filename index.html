@@ -289,7 +289,9 @@ async function loadAll(){
   for(;;){const {data,error}=await SB.from('docs').select('col,id,data,created_by').range(from,from+step-1);if(error)throw error;data.forEach(r=>{if(RAW[r.col])RAW[r.col].set(r.id,{...r.data,id:r.id,_by:r.created_by})});if(data.length<step)break;from+=step}
   COLS.forEach(rebuild);
 }
-async function loadProfiles(){const {data,error}=await SB.from('profiles').select('*').order('created_at');if(!error){PROFILES=data||[];MYPROFILE=PROFILES.find(p=>p.id===ME)||MYPROFILE}}
+let INVITES=[];
+async function loadProfiles(){const {data,error}=await SB.from('profiles').select('*').order('created_at');if(!error){PROFILES=data||[];MYPROFILE=PROFILES.find(p=>p.id===ME)||MYPROFILE}
+  if(MYPROFILE&&MYPROFILE.role==='owner'){const r=await SB.from('invites').select('*').order('created_at');if(!r.error)INVITES=r.data||[]}}
 async function put(col,obj){
   if(!canWrite){toast('ليست لديك صلاحية التعديل على هذا النظام');return false}
   if(!canDo(COL_KEY[col]||col)){toast('صلاحيتك لا تسمح بهذا التعديل. راجع مدير النظام');return false}
@@ -868,7 +870,8 @@ function vUsers(){
   <div class="note info">لإضافة مستخدم: أرسل له رابط التطبيق، فيضغط "إنشاء حساب" ويسجّل برقم جواله (أو إيميله) وكلمة مرور. يظهر هنا مظللًا بدون صلاحية، فتختار دوره والمندوب المرتبط به، ويتفعّل حسابه فورًا.
   <div class="actions" style="margin-top:8px"><code dir="ltr" style="background:var(--surface);padding:4px 8px;border-radius:6px;user-select:all">${esc(APP_LINK())}</code><button type="button" class="sm" id="copyLink">نسخ الرابط</button></div></div>
   ${pending?`<div class="note">${fmt(pending)} مستخدم بانتظار تحديد الصلاحية.</div>`:''}
-  <section class="sec"><div class="sechead"><h3>المستخدمون</h3><span class="sub">${fmt(P.length)} مستخدم</span></div>
+  ${invitesSection(repList)}
+  <section class="sec"><div class="sechead"><h3>المستخدمون المسجلون</h3><span class="sub">${fmt(P.length)} مستخدم</span></div>
   ${tbl('<th>الاسم</th><th>رقم الجوال / الإيميل</th><th>الدور</th><th>المندوب في دفترة</th><th>تاريخ التسجيل</th><th></th>',P.map(p=>{const own=p.role==='owner',me=p.id===ME;return `<tr${p.role==='none'?' style="background:var(--warn-soft)"':''}>
     <td><input id="pf-n-${esc(p.id)}" data-pf="${esc(p.id)}" data-k="name" value="${esc(p.name||'')}" style="min-width:140px">${p.role==='none'?'<br><span class="chip prog">بانتظار الصلاحية</span>':''}</td>
     <td dir="ltr" style="text-align:start">${esc(showLogin(p.email))}</td>
@@ -880,6 +883,29 @@ function vUsers(){
   <section class="sec"><h3>الأدوار</h3>${tbl('<th>الدور</th><th>ماذا يستطيع</th>',[`<tr><td><b>المالك (أنت)</b></td><td class="wrap">كل شيء، وإدارة الصلاحيات</td></tr>`,...Object.entries(ROLES).map(([k,v])=>`<tr><td><b>${v}</b></td><td class="wrap">${ROLE_DESC[k]}</td></tr>`)],'','')}</section></div>
   <section class="sec card"><h3>كلمة المرور</h3><span class="muted" style="font-size:.85rem">كل مستخدم يختار كلمة مروره بنفسه ولا أحد يستطيع قراءتها. إذا نسيها، اكتب له كلمة مرور مؤقتة في الجدول أعلاه واضغط "تعيين كلمة المرور"، وأبلغه بها، وهو يغيّرها بعد دخوله من زر "تغيير كلمة مروري".</span><div><button type="button" class="sm" id="changeMyPin">تغيير كلمة مروري</button></div></section>
   <section class="sec card"><h3>مهلة الخروج التلقائي</h3><div class="actions"><label for="idle" class="muted">يخرج المستخدم من التطبيق بعد عدم النشاط لمدة</label><select id="idle" style="width:auto">${[5,10,15,30,60,120,480].map(n=>`<option value="${n}"${idleMin()===n?' selected':''}>${n>=60?n/60+' ساعة':n+' دقيقة'}</option>`).join('')}</select></div></section>`;
+}
+/* phone numbers registered by the owner in advance, each with its role and Daftra rep; signup checks this list in the database */
+function invitesSection(repList){
+  const reg=ph=>PROFILES.find(p=>p.email===ph+'@'+PHONE_DOMAIN);
+  return `<section class="sec card" style="gap:12px"><div class="sechead"><h3>أرقام الجوال المسجلة عند الإدارة</h3><span class="sub">${fmt(INVITES.length)} رقم</span></div>
+  <span class="muted" style="font-size:.85rem">سجّل رقم جوال كل مستخدم وصلاحيته. عند إنشاء الحساب برقم الجوال يتحقق النظام من الرقم: إذا كان مسجلًا هنا يأخذ صلاحيته تلقائيًا، وإذا لم يكن مسجلًا يُرفض التسجيل.</span>
+  <form class="entry" id="fInvite">
+    <div class="fld"><label for="iv-phone">رقم الجوال</label><input id="iv-phone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" required dir="ltr"></div>
+    <div class="fld"><label for="iv-name">الاسم</label><input id="iv-name" required></div>
+    <div class="fld"><label for="iv-role">الصلاحية</label><select id="iv-role">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}"${k==='rep'?' selected':''}>${v}</option>`).join('')}</select></div>
+    <div class="fld"><label for="iv-rep">المندوب في دفترة</label><select id="iv-rep"><option value="">—</option>${repList.map(([k,v])=>`<option value="${esc(k)}">${esc(v)}</option>`).join('')}</select></div>
+    <div class="actions"><button class="pri" type="submit">تسجيل الرقم</button></div>
+  </form>
+  ${tbl('<th>رقم الجوال</th><th>الاسم</th><th>الصلاحية</th><th>المندوب</th><th>الحالة</th><th></th>',INVITES.map(iv=>{const p=reg(iv.phone);return `<tr><td dir="ltr" style="text-align:start">${esc('0'+String(iv.phone).slice(3))}</td><td>${esc(iv.name||'')}</td><td>${esc(ROLES[iv.role]||iv.role)}</td><td>${iv.rep?esc(userName(iv.rep)):'<span class="muted">—</span>'}</td>
+    <td>${p?'<span class="chip ok">أنشأ حسابه</span>':'<span class="chip prog">لم يسجّل بعد</span>'}</td>
+    <td><button type="button" class="sm ghost del" data-rminvite="${esc(iv.phone)}">حذف</button></td></tr>`}),'','لم تسجّل أي رقم بعد.')}</section>`;
+}
+async function saveInvite(){
+  const ph=normPhone(val('iv-phone'));if(!/^9665\d{8}$/.test(ph)){toast('اكتب رقم جوال سعودي صحيح يبدأ بـ 05');return}
+  const rec={phone:ph,name:val('iv-name'),role:val('iv-role')||'rep',rep:val('iv-rep')||null};
+  const {error}=await SB.from('invites').upsert(rec);if(error){toast('تعذر حفظ الرقم');return}
+  const p=PROFILES.find(x=>x.email===ph+'@'+PHONE_DOMAIN);if(p&&p.role!=='owner')await SB.from('profiles').update({role:rec.role,rep:rec.rep,name:rec.name||p.name}).eq('id',p.id);
+  clear(['iv-phone','iv-name']);await loadProfiles();render();toast('تم تسجيل الرقم وصلاحيته');
 }
 async function saveProfile(id,patch){
   const {error}=await SB.from('profiles').update(patch).eq('id',id);
@@ -914,7 +940,7 @@ function showAuth(state,msg){
     <button type="button" class="sm ghost iconbtn" id="forgotPw">${ICON_KEY}نسيت كلمة المرور؟</button>
     <p class="muted" style="font-size:.85rem;margin:0">ما عندك حساب؟ <button type="button" class="linkbtn" id="toSignup">إنشاء حساب</button></p>
     ${IS_STANDALONE()?'':`<button type="button" class="sm iconbtn" id="installApp2" style="margin-top:6px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 7v7"/><path d="M9 11l3 3 3-3"/><path d="M10 18h4"/></svg>تثبيت التطبيق على جوالك</button>`}`;
-  else if(state==='signup')h=`<h2>إنشاء حساب</h2><p class="muted">بعد إنشاء الحساب يحدد مدير النظام صلاحيتك.</p>
+  else if(state==='signup')h=`<h2>إنشاء حساب</h2><p class="muted">سجّل برقم جوالك المسجل عند الإدارة، وتأخذ صلاحيتك تلقائيًا.</p>
     <form id="fSignup"><label for="au-name" class="muted">الاسم</label><input id="au-name" type="text" autocomplete="name" required style="direction:rtl;text-align:start">${em('')}${pw('au-pass','كلمة المرور (6 خانات على الأقل)','new-password')}${pw('au-pass2','أعد كتابة كلمة المرور','new-password')}${err}<button class="pri" type="submit">إنشاء الحساب</button></form>
     <button type="button" class="linkbtn" id="backLogin">رجوع لتسجيل الدخول</button>`;
   else if(state==='forgot')h=`<h2>نسيت كلمة المرور</h2>
@@ -929,7 +955,7 @@ function showAuth(state,msg){
   $('#lockBody').innerHTML=h;const f=$('#lockBody input:not([value]):not([type=hidden]), #lockBody input[value=""]')||$('#lockBody input');if(f)f.focus();
 }
 function unlock(){AUTH='ok';LOCKED=false;lastAct=Date.now();$('#lock').hidden=true;render()}
-const authErr=e=>{const m=String(e&&e.message||'');if(/invalid login/i.test(m))return 'الإيميل أو كلمة المرور غير صحيحة';if(/not confirmed/i.test(m))return 'أكّد إيميلك أولًا من الرسالة اللي وصلتك، ثم سجّل الدخول';if(/already registered/i.test(m))return 'هذا الإيميل مسجّل من قبل. سجّل الدخول أو اضغط نسيت كلمة المرور';if(/rate|too many/i.test(m))return 'محاولات كثيرة. انتظر قليلًا وأعد المحاولة';if(/password/i.test(m))return 'كلمة المرور ضعيفة. اختر 6 خانات على الأقل';return 'تعذر الإتمام. تحقق من الاتصال وأعد المحاولة'};
+const authErr=e=>{const m=String(e&&e.message||'');if(/database error|PHONE_NOT_INVITED/i.test(m))return 'رقم الجوال هذا غير مسجل عند الإدارة. تواصل مع مدير النظام ليسجّله لك';if(/invalid login/i.test(m))return 'الإيميل أو كلمة المرور غير صحيحة';if(/not confirmed/i.test(m))return 'أكّد إيميلك أولًا من الرسالة اللي وصلتك، ثم سجّل الدخول';if(/already registered/i.test(m))return 'هذا الإيميل مسجّل من قبل. سجّل الدخول أو اضغط نسيت كلمة المرور';if(/rate|too many/i.test(m))return 'محاولات كثيرة. انتظر قليلًا وأعد المحاولة';if(/password/i.test(m))return 'كلمة المرور ضعيفة. اختر 6 خانات على الأقل';return 'تعذر الإتمام. تحقق من الاتصال وأعد المحاولة'};
 async function submitAuth(id){
   const err=t=>{const e=$('#pinErr');if(e)e.textContent=t};
   const v=i=>(document.getElementById(i)||{}).value||'';
@@ -972,10 +998,18 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INSTALL_EVT
 function installHelp(){
   const ios=`<ol style="text-align:start;line-height:2;margin:0;padding-inline-start:20px"><li>افتح الرابط في متصفح <b>Safari</b></li><li>اضغط زر <b>المشاركة</b> <span style="display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px">⬆️</span> أسفل الشاشة</li><li>اختر <b>"إضافة إلى الشاشة الرئيسية"</b></li><li>اضغط <b>إضافة</b></li></ol>`;
   const andr=`<ol style="text-align:start;line-height:2;margin:0;padding-inline-start:20px"><li>افتح الرابط في متصفح <b>Chrome</b></li><li>اضغط <b>⋮</b> أعلى الشاشة</li><li>اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b></li></ol>`;
+  const ua=navigator.userAgent,IS_AND=/android/i.test(ua);
+  const inApp=/WhatsApp|FBAN|FBAV|FB_IAB|Instagram|Snapchat|Line\/|Telegram|TikTok|; wv\)/i.test(ua)||(IS_IOS&&!/Safari\//.test(ua))||(IS_IOS&&/CriOS|FxiOS|EdgiOS/.test(ua));
+  const appUrl=location.origin+location.pathname;
+  const openChrome=IS_AND?`<a class="pri" style="display:block;text-align:center;padding:10px;border-radius:10px;text-decoration:none;margin:6px 0" href="intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end">افتح الرابط في Chrome</a>`:'';
+  const warn=inApp?`<div style="background:color-mix(in srgb,#e8a33d 18%,transparent);border-radius:10px;padding:10px;text-align:start;line-height:1.8"><b>أنت فاتح الرابط من داخل تطبيق آخر (مثل واتساب)، وهذا ما يسمح بالتثبيت.</b><br>افتحه أولًا في ${IS_IOS?'<b>Safari</b>':'<b>Chrome</b>'} ثم اتبع الخطوات.</div>${openChrome}`:'';
   const d=document.createElement('div');d.id='installHelp';
   d.innerHTML=`<div class="lockbox card" style="max-width:420px"><img src="icon-192.png" alt="" width="72" height="72" style="border-radius:18px"><h2>تثبيت تطبيق زيزكوكيز</h2>
-    ${IS_IOS?ios:`<b>أندرويد</b>${andr}<b style="margin-top:8px">آيفون</b>${ios}`}
-    <p class="muted" style="font-size:.85rem">بعدها تطلع أيقونة زيزكوكيز على شاشة جوالك وتفتح كتطبيق.</p><button type="button" class="pri" id="closeInstallHelp">تم</button></div>`;
+    <p style="margin:0;font-weight:600">التثبيت ما يصير من هذا الزر، تسويه أنت من قائمة المتصفح بهذه الخطوات:</p>
+    ${warn}
+    ${IS_IOS?ios:IS_AND?andr:`<b>أندرويد</b>${andr}<b style="margin-top:8px">آيفون</b>${ios}`}
+    <button type="button" class="sm" id="copyAppLink" data-url="${appUrl}">نسخ رابط التطبيق</button>
+    <p class="muted" style="font-size:.85rem">بعدها تطلع أيقونة زيزكوكيز على شاشة جوالك وتفتح كتطبيق.</p><button type="button" class="pri" id="closeInstallHelp">إغلاق</button></div>`;
   d.style.cssText='position:fixed;inset:0;z-index:60;background:color-mix(in srgb,var(--ink) 45%,transparent);display:grid;place-items:center;padding:16px';
   document.body.appendChild(d);
 }
@@ -1055,6 +1089,7 @@ function clear(ids){ids.forEach(id=>{const el=document.getElementById(id);if(el)
 document.addEventListener('submit',async e=>{
   e.preventDefault(); const f=e.target.id;
   if(['fLogin','fSignup','fForgot','fNewPw'].includes(f)){submitAuth(f);return}
+  if(f==='fInvite'){saveInvite();return}
   if(f==='fOrder'){
     const p=val('o-p'),q=num(val('o-q')); if(!p||q<=0){toast('اختر الصنف وأدخل كمية أكبر من صفر');return}
     if(!val('o-c')){toast('اختر المندوب صاحب الطلب');return}
@@ -1140,6 +1175,7 @@ document.addEventListener('click',async e=>{
   if(b.dataset.setpw){const id=b.dataset.setpw,inp=document.getElementById('np-'+id),pw=inp?inp.value:'';if(pw.length<6){toast('كلمة المرور المؤقتة لازم تكون 6 خانات على الأقل');return}
     b.disabled=true;const {error}=await SB.rpc('owner_set_password',{target:id,pw});b.disabled=false;
     if(error){toast('تعذر تعيين كلمة المرور');return}inp.value='';toast('تم تعيين كلمة المرور المؤقتة. أبلغ المستخدم بها، ويغيّرها بعد دخوله');return}
+  if(b.dataset.rminvite){if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الحذف';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='حذف'}},3500);return}const {error}=await SB.from('invites').delete().eq('phone',b.dataset.rminvite);if(error){toast('تعذر الحذف');return}await loadProfiles();render();toast('حُذف الرقم من القائمة');return}
   if(b.dataset.rmprofile){if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الإزالة';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='إزالة'}},3500);return}const {error}=await SB.from('profiles').delete().eq('id',b.dataset.rmprofile);if(error){toast('تعذرت الإزالة');return}await loadProfiles();render();toast('أُزيل المستخدم');return}
   if(b.id==='copyLink'){try{await navigator.clipboard.writeText(APP_LINK());toast('تم نسخ الرابط')}catch(e){toast(APP_LINK())}return}
   if(b.id==='changeMyPin'){showAuth('newpw');return}
@@ -1148,6 +1184,7 @@ document.addEventListener('click',async e=>{
   if(b.id==='toSignup'){showAuth('signup');return}
   if(b.id==='forgotPw'){showAuth('forgot');return}
   if(b.id==='installApp'||b.id==='installApp2'){if(INSTALL_EVT){INSTALL_EVT.prompt();INSTALL_EVT.userChoice.then(c=>{if(c&&c.outcome==='accepted')b.hidden=true}).catch(()=>{});INSTALL_EVT=null}else installHelp();return}
+  if(b.id==='copyAppLink'){const u=b.dataset.url;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>{b.textContent='تم النسخ ✓'}).catch(()=>{b.textContent=u});return}
   if(b.id==='closeInstallHelp'){const d=document.getElementById('installHelp');if(d)d.remove();return}
   if(b.id==='logout'){lockNow(true);return}
   if(b.id==='dlOrders'){downloadOrders();return}
