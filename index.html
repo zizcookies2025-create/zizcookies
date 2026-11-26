@@ -867,7 +867,7 @@ function vUsers(){
   const pending=P.filter(p=>p.role==='none').length;
   const linked=k=>P.find(p=>p.rep===k&&p.role!=='none');
   return `<div class="sechead"><h2>المستخدمون والصلاحيات</h2><span class="sub">أنت المالك وعندك كل الصلاحيات دائمًا</span></div>
-  <div class="note info">لإضافة مستخدم: أرسل له رابط التطبيق، فيضغط "إنشاء حساب" ويسجّل برقم جواله (أو إيميله) وكلمة مرور. يظهر هنا مظللًا بدون صلاحية، فتختار دوره والمندوب المرتبط به، ويتفعّل حسابه فورًا.
+  <div class="note info">لإضافة مستخدم: سجّل رقم جواله وصلاحيته في القائمة تحت، ثم أرسل له رابط التطبيق، فيضغط "أول مرة؟ إنشاء حساب" (مو "دخول") ويسجّل برقم جواله وكلمة مرور يختارها. يظهر هنا مظللًا بدون صلاحية، فتختار دوره والمندوب المرتبط به، ويتفعّل حسابه فورًا.
   <div class="actions" style="margin-top:8px"><code dir="ltr" style="background:var(--surface);padding:4px 8px;border-radius:6px;user-select:all">${esc(APP_LINK())}</code><button type="button" class="sm" id="copyLink">نسخ الرابط</button></div></div>
   ${pending?`<div class="note">${fmt(pending)} مستخدم بانتظار تحديد الصلاحية.</div>`:''}
   ${invitesSection(repList)}
@@ -938,7 +938,7 @@ function showAuth(state,msg){
   else if(state==='login')h=`<h2>${esc(msg&&msg.title||'تسجيل الدخول')}</h2><p class="muted">${esc(msg&&msg.text||'زيزكوكيز · نظام الإنتاج اليومي')}</p>
     <form id="fLogin">${em(lastEmail)}${pw('au-pass','كلمة المرور','current-password')}${err}<button class="pri iconbtn" type="submit" style="justify-content:center">${ICON_IN}دخول</button></form>
     <button type="button" class="sm ghost iconbtn" id="forgotPw">${ICON_KEY}نسيت كلمة المرور؟</button>
-    <p class="muted" style="font-size:.85rem;margin:0">ما عندك حساب؟ <button type="button" class="linkbtn" id="toSignup">إنشاء حساب</button></p>
+    <button type="button" class="iconbtn" id="toSignup" style="border:2px solid var(--pri);color:var(--pri);font-weight:700">أول مرة؟ إنشاء حساب</button>
     ${IS_STANDALONE()?'':`<button type="button" class="sm iconbtn" id="installApp2" style="margin-top:6px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 7v7"/><path d="M9 11l3 3 3-3"/><path d="M10 18h4"/></svg>تثبيت التطبيق على جوالك</button>`}`;
   else if(state==='signup')h=`<h2>إنشاء حساب</h2><p class="muted">سجّل برقم جوالك المسجل عند الإدارة، وتأخذ صلاحيتك تلقائيًا.</p>
     <form id="fSignup"><label for="au-name" class="muted">الاسم</label><input id="au-name" type="text" autocomplete="name" required style="direction:rtl;text-align:start">${em('')}${pw('au-pass','كلمة المرور (6 خانات على الأقل)','new-password')}${pw('au-pass2','أعد كتابة كلمة المرور','new-password')}${err}<button class="pri" type="submit">إنشاء الحساب</button></form>
@@ -962,7 +962,7 @@ async function submitAuth(id){
   const btn=$('#lockBody button[type=submit]');if(btn)btn.disabled=true;
   try{
     if(id==='fLogin'){const L=loginId(v('au-email'));if(!L.email){err('اكتب رقم جوال سعودي صحيح (05xxxxxxxx) أو إيميل');return}try{localStorage.setItem('ziz-email',v('au-email').trim())}catch(e){}
-      const {data,error}=await SB.auth.signInWithPassword({email:L.email,password:v('au-pass')});if(error){err(authErr(error).replace('الإيميل','رقم الجوال أو الإيميل'));return}startData(data.session);return}
+      const {data,error}=await SB.auth.signInWithPassword({email:L.email,password:v('au-pass')});if(error){err(authErr(error).replace('الإيميل','رقم الجوال أو الإيميل')+(L.phone&&/invalid/i.test(error.message||'')?' — إذا هذي أول مرة تدخل، اضغط "أول مرة؟ إنشاء حساب" تحت وسجّل برقمك وكلمة مرور جديدة.':''));return}startData(data.session);return}
     if(id==='fSignup'){const a=v('au-pass');if(a.length<6){err('كلمة المرور لازم تكون 6 خانات على الأقل');return}if(a!==v('au-pass2')){err('كلمتا المرور غير متطابقتين');return}
       const L=loginId(v('au-email'));if(!L.email){err('اكتب رقم جوال سعودي صحيح (05xxxxxxxx) أو إيميل');return}
       const email=L.email;const {data,error}=await SB.auth.signUp({email,password:a,options:{data:{name:v('au-name').trim(),phone:L.phone||''},emailRedirectTo:APP_LINK()}});
