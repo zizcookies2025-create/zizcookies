@@ -446,6 +446,7 @@ function render(){
   const V={today:vToday,orders:vOrders,issues:vIssues,sales:vSales,returns:vReturns,collections:vCollections,items:vItems,charts:vCharts,calc:vCalc,report:vReport,users:vUsers,targets:vTargets,changes:vChanges}[view]||vToday;
   let h='';
   if(note) h+=`<div class="note">${esc(note)}</div>`;
+  if(ready&&R==='rep'&&!(MYPROFILE&&MYPROFILE.rep))h+=`<div class="note" style="font-weight:600">حسابك غير مربوط باسمك في دفترة، فما تظهر لك مبيعاتك ولا مرتجعاتك ولا تحصيلاتك. اطلب من المدير العام يختار اسمك في "المندوب في دفترة" من تبويب الصلاحيات.</div>`;
   if(ready&&R==='none') h+=`<div class="card" style="text-align:center;padding:40px 16px"><h2>أهلًا بك في نظام زيزكوكيز</h2><p class="muted">تم إنشاء حسابك وتسجيل دخولك. بانتظار أن يحدد لك مدير النظام صلاحيتك، وبعدها تظهر لك التبويبات الخاصة بك تلقائيًا.</p></div>`;
   else h+=V();
   $('#main').innerHTML=h;
@@ -1020,6 +1021,7 @@ function invitesSection(repList){
 async function saveInvite(){
   const ph=normPhone(val('iv-phone'));if(!/^9665\d{8}$/.test(ph)){toast('اكتب رقم جوال سعودي صحيح يبدأ بـ 05');return}
   const rec={phone:ph,name:val('iv-name'),role:val('iv-role')||'rep',rep:val('iv-rep')||null};
+  if(rec.role==='rep'&&!rec.rep){toast('اختر اسم المندوب في دفترة، وإلا ما تظهر له مبيعاته');return}
   const {error}=await SB.from('invites').upsert(rec);if(error){toast('تعذر حفظ الرقم');return}
   const p=PROFILES.find(x=>x.email===ph+'@'+PHONE_DOMAIN);if(p&&p.role!=='owner')await SB.from('profiles').update({role:rec.role,rep:rec.rep,name:rec.name||p.name}).eq('id',p.id);
   clear(['iv-phone','iv-name']);await loadProfiles();render();toast('تم تسجيل الرقم وصلاحيته');
