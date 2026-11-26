@@ -199,15 +199,15 @@ body{margin:0;font-size:14px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
-const COLS=['products','materials','orders','issues','sales','returns','collections','meta'];
-const S={products:[],materials:[],orders:[],issues:[],sales:[],returns:[],collections:[],meta:[]};
+const COLS=['products','materials','orders','issues','sales','returns','collections','meta','calcs'];
+const S={products:[],materials:[],orders:[],issues:[],sales:[],returns:[],collections:[],meta:[],calcs:[]};
 let PROFILES=[],MYPROFILE=null,SB=null;
 /* ---------- roles: the owner holds everything; each person gets one role assigned by the owner ---------- */
 const ROLES={admin:'مدير (كل الصلاحيات)',production:'الإنتاج',rep:'مندوب',accounting:'المحاسبة',viewer:'مشاهدة فقط'};
 const ROLE_DESC={admin:'كل التبويبات وكل العمليات ما عدا إدارة الصلاحيات',production:'الطلبات واعتماد المتأخر منها، صرف المواد، حاسبة الإنتاج، عرض الأصناف',rep:'تسجيل طلباته هو فقط، وعرض ملخص اليوم وحاسبة الإنتاج',accounting:'المبيعات والمرتجعات والتحصيلات والرسوم البيانية والتقارير',viewer:'يشوف كل شيء بدون أي تعديل'};
 const ROLE_TABS={owner:'*',admin:'*',production:['today','orders','issues','calc','items','charts'],rep:['today','orders','calc'],accounting:['today','sales','returns','collections','charts','report'],viewer:['today','orders','issues','sales','returns','collections','calc','items','charts','report'],none:[]};
 const ROLE_WRITE={owner:'*',admin:['orders','approve','issues','returns','collections','items','calc','sales'],production:['orders','approve','issues','calc'],rep:['orders'],accounting:['returns','collections'],viewer:[],none:[]};
-const COL_KEY={orders:'orders',issues:'issues',sales:'sales',returns:'returns',collections:'collections',products:'items',materials:'items',meta:'calc'};
+const COL_KEY={orders:'orders',issues:'issues',sales:'sales',returns:'returns',collections:'collections',products:'items',materials:'items',meta:'calc',calcs:'approve'};
 let IS_OWNER=false,MYEMAIL='';
 const lc=s=>String(s||'').trim().toLowerCase();
 /* role and linked rep come from the signed-in user's profile row */
@@ -499,7 +499,9 @@ function vOrders(){
     <div class="actions"><button class="pri" type="submit">تسجيل الطلب</button></div>
   </form></section>`;
   h+=`<section class="sec card" style="gap:14px"><div class="sechead"><h2>ملف طلبات يوم ${esc(dayLabel(day))}</h2>
-    <div class="actions">${downloads?`<button type="button" class="pri sm" id="dlOrdersPdf"${o.length?'':' disabled'}>تنزيل الملف PDF</button><button type="button" class="sm" id="dlOrders"${o.length?'':' disabled'}>Excel</button>`:''}</div></div>
+    <div class="actions">${(()=>{const c=calcDoc(day);if(!canDo('approve'))return c?`<span class="chip ${c.status==='approved'?'done':'prog'}">${c.status==='approved'?'حسبة الإنتاج معتمدة':'محوّلة لحسبة الإنتاج'}</span>`:'';
+      if(c&&c.status==='approved')return `<a class="sm iconbtn permlink" href="#calc">حسبة الإنتاج معتمدة ✓</a>`;
+      return `<button type="button" class="pri sm" id="toCalc"${F.rows.length?'':' disabled'}>${c?'تحديث حسبة الإنتاج':'تحويل إلى حسبة الإنتاج'}</button>`})()}${downloads?`<button type="button" class="sm" id="dlOrdersPdf"${o.length?'':' disabled'}>تنزيل الملف PDF</button><button type="button" class="sm" id="dlOrders"${o.length?'':' disabled'}>Excel</button>`:''}</div></div>
     <div class="kpis"><div class="kpi"><span class="lb">${ic('orders')}الطلبات في الملف</span><span class="v">${fmt(F.counted.length)}</span><span class="s">${fmt(F.tq)} وحدة · ${fmt(F.rows.length)} صنف</span></div>
     <div class="kpi"><span class="lb">بانتظار موافقة الإنتاج</span><span class="v">${fmt(F.pend.length)}</span><span class="s">لا تدخل الإجمالي حتى الموافقة</span></div>
     <div class="kpi neg"><span class="lb">مرفوضة</span><span class="v">${fmt(F.rej.length)}</span></div></div>
@@ -607,12 +609,56 @@ function calcCompute(lines){
   return {orderRows,prods,mats:Object.values(mats).sort((a,b)=>b.g-a.g),missing,T};
 }
 const kg=g=>fmt(+(g/1000).toFixed(3));
+/* ---------- production calculation: the day's approved orders transferred as one document, then approved by production ---------- */
+const calcDoc=d=>S.calcs.find(x=>x.id==='calc-'+d);
+async function transferToCalc(){
+  const o=onDay('orders',day),F=orderFile(o);
+  if(!F.rows.length){toast('لا توجد طلبات معتمدة في ملف هذا اليوم');return}
+  const ex=calcDoc(day);if(ex&&ex.status==='approved'){toast('حسبة هذا اليوم معتمدة ولا يمكن تعديلها');return}
+  const rec={id:'calc-'+day,date:day,status:'pending',createdAt:ex?ex.createdAt:Date.now(),
+    lines:F.rows.map(r=>({p:r.id,q:r.q})),
+    detail:F.counted.map(x=>({rep:x.user||'',repName:reqName(x)||'بدون مندوب',p:x.productId,q:num(x.qty),note:x.note||'',t:x.createdAt||0,late:(x.window||'on')!=='on'})),
+    excluded:F.pend.length+F.rej.length,transferredBy:ME,transferredAt:Date.now()};
+  if(await put('calcs',rec)){toast(ex?'تم تحديث حسبة الإنتاج':'تم تحويل الطلبات إلى حسبة الإنتاج');view='calc';history.replaceState(null,'','#calc');render();window.scrollTo({top:0})}
+}
+function calcSnapshot(c){const R=calcCompute((c.lines||[]).map(l=>({p:l.p,q:String(l.q)})));
+  return {prods:R.prods.map(x=>({p:x.p.id,q:x.q,gp:x.gp,g:x.g,trays:x.traysUp})),mats:R.mats.map(m=>({m:m.id,g:m.g})),tray:R.T,missing:R.missing}}
+async function approveCalc(){const c=calcDoc(day);if(!c)return;
+  if(await put('calcs',{...c,status:'approved',approvedBy:ME,approvedAt:Date.now(),snapshot:calcSnapshot(c)}))toast('تم اعتماد حسبة الإنتاج')}
+function calcPanel(){
+  const c=calcDoc(day);
+  if(!c)return `<div class="note info">لم تُحوَّل طلبات ${esc(dayLabel(day))} إلى حسبة الإنتاج بعد. حوّلها من تبويب <a href="#orders">الطلبات اليومية</a> بزر "تحويل إلى حسبة الإنتاج".</div>`;
+  const appr=c.status==='approved',snap=appr&&c.snapshot?c.snapshot:calcSnapshot(c);
+  const when=ts=>ts?new Date(ts).toLocaleString('ar',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+  const totQ=(c.lines||[]).reduce((a,l)=>a+num(l.q),0),pcs=snap.prods.reduce((a,x)=>a+x.q,0),trays=snap.prods.reduce((a,x)=>a+x.trays,0),totG=snap.mats.reduce((a,m)=>a+m.g,0);
+  const G={};(c.detail||[]).forEach(d=>{(G[d.repName]=G[d.repName]||[]).push(d)});
+  const isBox=id=>{const p=byId('products',id);return p&&(p.contents||[]).length};
+  return `<section class="sec card" style="gap:14px;border:2px solid ${appr?'var(--good)':'var(--warn)'}">
+    <div class="sechead"><h2>حسبة الإنتاج · ${esc(dayLabel(day))}</h2>
+      <div class="actions"><span class="chip ${appr?'done':'prog'}">${appr?'معتمدة':'بانتظار الاعتماد'}</span>
+      ${!appr&&canDo('approve')?`<button type="button" class="pri sm" id="approveCalc">اعتماد الحسبة</button>`:''}
+      ${canDo('issues')?`<button type="button" class="sm" id="calcToIssue">صرف المواد</button>`:''}
+      <button type="button" class="sm" id="calcLoad">فتح في الحاسبة</button></div></div>
+    <span class="muted" style="font-size:.85rem">حوّلها ${esc(personName(c.transferredBy))} · ${when(c.transferredAt)}${appr?` · اعتمدها <b>${esc(personName(c.approvedBy))}</b> · ${when(c.approvedAt)}`:''}${c.excluded?` · ${fmt(c.excluded)} طلب متأخر غير معتمد لم يدخل`:''}</span>
+    ${snap.missing&&snap.missing.length?`<div class="note">أصناف بلا تركيبة لم تدخل في حساب المواد: ${esc(snap.missing.join('، '))}</div>`:''}
+    <div class="kpis"><div class="kpi"><span class="lb">${ic('orders')}إجمالي الطلب</span><span class="v">${fmt(totQ)}</span><span class="s">${fmt((c.lines||[]).length)} صنف</span></div>
+      <div class="kpi"><span class="lb">${ic('orders')}الحبات</span><span class="v">${fmt(pcs)}</span></div>
+      <div class="kpi"><span class="lb">${ic('orders')}الصواني</span><span class="v">${fmt(trays)}</span><span class="s">${fmt(snap.tray)} حبة للصينية</span></div>
+      <div class="kpi"><span class="lb">${ic('issue')}وزن المواد</span><span class="v">${kg(totG)} كجم</span></div></div>
+    <h3>الإجمالي</h3>
+    ${tbl('<th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th>',(c.lines||[]).map(l=>`<tr><td>${esc(pName(l.p))}</td><td class="n"><b>${fmt(l.q)}</b></td><td>${isBox(l.p)?'بوكس':'حبة'}</td></tr>`),`<td>الإجمالي</td><td class="n">${fmt(totQ)}</td><td></td>`,'')}
+    <div class="grid2"><section class="sec"><h3>الحبات والصواني</h3>${tbl('<th>نوع الحبة</th><th class="n">الحبات</th><th class="n">الصواني</th><th class="n">الوزن كجم</th>',snap.prods.map(x=>`<tr><td>${esc(pName(x.p))}</td><td class="n">${fmt(x.q)}</td><td class="n"><b>${fmt(x.trays)}</b></td><td class="n">${kg(x.g)}</td></tr>`),snap.prods.length?`<td>الإجمالي</td><td class="n">${fmt(pcs)}</td><td class="n">${fmt(trays)}</td><td class="n">${kg(totG)}</td>`:'','')}</section>
+    <section class="sec"><h3>المواد المطلوبة</h3>${tbl('<th>المادة</th><th class="n">كجم</th><th class="n">العبوات</th>',snap.mats.map(m=>{const M=byId('materials',m.m),pk=M&&num(M.pack);return `<tr><td>${esc(mName(m.m))}</td><td class="n">${kg(m.g)}</td><td class="n">${pk?`<b>${fmt(Math.ceil(m.g/pk-1e-9))}</b> ${esc(M.packName||'عبوة')}`:'—'}</td></tr>`}),'','أضف تركيبة الحبات بالجرام لحساب المواد.')}</section></div>
+    <h3>التفصيل حسب المندوب</h3>
+    ${tbl('<th>المندوب</th><th>الصنف</th><th class="n">الكمية</th><th>الملاحظات</th><th>وقت الطلب</th>',Object.entries(G).flatMap(([rep,list])=>[...list.map((d,j)=>`<tr>${j?'':`<td rowspan="${list.length+1}" style="vertical-align:top"><b>${esc(rep)}</b><br><span class="muted">${fmt(list.length)} طلب</span></td>`}<td>${esc(pName(d.p))}</td><td class="n">${fmt(d.q)}</td><td class="wrap">${d.note?esc(d.note):'<span class="muted">—</span>'}</td><td class="muted">${d.t?timeOf(d.t):''}${d.late?' <span class="chip new">متأخر معتمد</span>':''}</td></tr>`),`<tr><td class="muted">إجمالي المندوب</td><td class="n"><b>${fmt(list.reduce((a,d)=>a+d.q,0))}</b></td><td colspan="2"></td></tr>`]),'','')}
+  </section>`;
+}
 function vCalc(){
   if(!draft.calc)draft.calc=[{p:'',q:''}];
   const R=calcCompute(draft.calc),totG=R.prods.reduce((a,x)=>a+x.g,0),pieces=R.prods.reduce((a,x)=>a+x.q,0),trays=R.prods.reduce((a,x)=>a+x.traysUp,0);
   const lines=draft.calc.map((l,i)=>{const p=byId('products',l.p),box=p&&(p.contents||[]).length;return `<div class="line"><select id="cl-p-${i}" data-calc="${i}" data-k="p" aria-label="الصنف">${opt(sortByName(S.products),l.p,'اختر الصنف')}</select><input id="cl-q-${i}" data-calc="${i}" data-k="q" type="number" step="any" min="0" placeholder="${box?'عدد البوكسات':'عدد الحبات'}" value="${esc(l.q)}" aria-label="الكمية" inputmode="decimal"><span class="u">${box?'بوكس':'حبة'}</span><button type="button" class="sm ghost" data-rmcalc="${i}" aria-label="إزالة">✕</button></div>`}).join('');
   const recipe=x=>x.bom.length?x.bom.map(b=>`${esc(mName(b.m))} ${fmt(b.q)}`).join(' + ')+` = <b>${fmt(x.gp)} جم</b>`:`<span class="chip low">بلا تركيبة</span> <button type="button" class="sm ghost" data-editp="${esc(x.p.id)}" data-goitems="1">أضف التركيبة</button>`;
-  return `<div class="sechead"><h2>حاسبة الإنتاج</h2><span class="sub">اختر الأصناف وعدد القطع، ويحسب النظام وزن كل مادة بالجرام والكيلو وعدد العبوات</span></div>
+  return calcPanel()+`<div class="sechead" style="margin-top:10px"><h2>حاسبة الإنتاج</h2><span class="sub">اختر الأصناف وعدد القطع، ويحسب النظام وزن كل مادة بالجرام والكيلو وعدد العبوات</span></div>
   <div class="card actions" style="gap:10px"><div class="lines" style="flex:1;min-width:260px">${lines}<div class="actions"><button type="button" class="sm" id="addCalc">+ إضافة صنف</button><button type="button" class="sm" id="calcFromOrders">تحميل ملف طلبات ${esc(dayLabel(day))}</button><button type="button" class="sm ghost" id="calcClear">مسح</button></div></div></div>
   ${R.missing.length?`<div class="note">أصناف بلا تركيبة: ${esc(R.missing.join('، '))}. أضف تركيبة القطعة بالجرام من تبويب الأصناف والمواد ليدخل وزنها في الحساب.</div>`:''}
   <div class="card actions"><label for="tray" class="muted">عدد الحبات في الصينية</label><input id="tray" type="number" min="1" step="1" style="width:90px" value="${R.T}" inputmode="numeric"><span class="muted" style="font-size:.82rem">يُحفظ للجميع ويُستخدم في حساب الصواني</span></div>
@@ -1004,6 +1050,10 @@ document.addEventListener('click',async e=>{
   if(b.id==='iprodFromOrders'){const F=orderFile(onDay('orders',day));if(!F.rows.length){toast('لا توجد طلبات في ملف هذا اليوم');return}draft.issueProds=F.rows.map(r=>({p:r.id,q:String(r.q)}));reindex('ip');issueFromProds();render();toast('تم تحميل طلبات اليوم وحساب المواد');return}
   if(b.id==='addCalc'){draft.calc.push({p:'',q:''});render();return}
   if(b.dataset.rmcalc!==undefined){draft.calc.splice(+b.dataset.rmcalc,1);if(!draft.calc.length)draft.calc=[{p:'',q:''}];reindex('cl');render();return}
+  if(b.id==='toCalc'){b.disabled=true;await transferToCalc();b.disabled=false;return}
+  if(b.id==='approveCalc'){if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الاعتماد';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='اعتماد الحسبة'}},4000);return}b.disabled=true;await approveCalc();return}
+  if(b.id==='calcLoad'){const c=calcDoc(day);if(!c)return;draft.calc=c.lines.map(l=>({p:l.p,q:String(l.q)}));reindex('cl');render();setTimeout(()=>{const el=document.getElementById('cl-p-0');if(el)el.scrollIntoView({block:'center'})},50);return}
+  if(b.id==='calcToIssue'){const c=calcDoc(day);if(!c)return;draft.issueProds=c.lines.map(l=>({p:l.p,q:String(l.q)}));reindex('ip');issueFromProds();view='issues';history.replaceState(null,'','#issues');render();window.scrollTo({top:0});toast('تم تحميل الحسبة في إذن الصرف');return}
   if(b.id==='calcClear'){draft.calc=[{p:'',q:''}];reindex('cl');render();return}
   if(b.id==='calcFromOrders'){const F=orderFile(onDay('orders',day));if(!F.rows.length){toast('لا توجد طلبات في ملف هذا اليوم');return}draft.calc=F.rows.map(r=>({p:r.id,q:String(r.q)}));reindex('cl');render();toast('تم تحميل طلبات اليوم');return}
   if(b.dataset.rmbom!==undefined){draft.bom.splice(+b.dataset.rmbom,1);reindex('b');render();return}
