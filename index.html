@@ -173,7 +173,7 @@ body{margin:0;font-size:14px}
       <input type="date" id="day">
       <button class="sm" id="nextDay" type="button" aria-label="اليوم التالي">←</button>
       <button class="sm" id="toToday" type="button">اليوم</button>
-      <button class="sm pri" id="installApp" type="button" hidden>تثبيت التطبيق</button>
+      <button class="sm pri iconbtn" id="installApp" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 7v7"/><path d="M9 11l3 3 3-3"/><path d="M10 18h4"/></svg>تثبيت التطبيق</button>
       <span class="acct" id="acct" hidden><span class="acctico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span><span class="acctname"><b id="acctName"></b><small id="acctRole"></small></span>
       <a class="sm iconbtn permlink" id="permLink" href="#users" hidden title="المستخدمون والصلاحيات"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>الصلاحيات</a>
       <button class="sm iconbtn" id="logout" type="button" title="تسجيل الخروج"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/></svg>خروج</button></span>
@@ -865,20 +865,20 @@ function vUsers(){
   const pending=P.filter(p=>p.role==='none').length;
   const linked=k=>P.find(p=>p.rep===k&&p.role!=='none');
   return `<div class="sechead"><h2>المستخدمون والصلاحيات</h2><span class="sub">أنت المالك وعندك كل الصلاحيات دائمًا</span></div>
-  <div class="note info">لإضافة مستخدم: أرسل له رابط التطبيق، فيضغط "إنشاء حساب" ويسجّل بإيميله وكلمة مرور. يظهر هنا مظللًا بدون صلاحية، فتختار دوره والمندوب المرتبط به، ويتفعّل حسابه فورًا.
+  <div class="note info">لإضافة مستخدم: أرسل له رابط التطبيق، فيضغط "إنشاء حساب" ويسجّل برقم جواله (أو إيميله) وكلمة مرور. يظهر هنا مظللًا بدون صلاحية، فتختار دوره والمندوب المرتبط به، ويتفعّل حسابه فورًا.
   <div class="actions" style="margin-top:8px"><code dir="ltr" style="background:var(--surface);padding:4px 8px;border-radius:6px;user-select:all">${esc(APP_LINK())}</code><button type="button" class="sm" id="copyLink">نسخ الرابط</button></div></div>
   ${pending?`<div class="note">${fmt(pending)} مستخدم بانتظار تحديد الصلاحية.</div>`:''}
   <section class="sec"><div class="sechead"><h3>المستخدمون</h3><span class="sub">${fmt(P.length)} مستخدم</span></div>
-  ${tbl('<th>الاسم</th><th>الإيميل</th><th>الدور</th><th>المندوب في دفترة</th><th>تاريخ التسجيل</th><th></th>',P.map(p=>{const own=p.role==='owner',me=p.id===ME;return `<tr${p.role==='none'?' style="background:var(--warn-soft)"':''}>
+  ${tbl('<th>الاسم</th><th>رقم الجوال / الإيميل</th><th>الدور</th><th>المندوب في دفترة</th><th>تاريخ التسجيل</th><th></th>',P.map(p=>{const own=p.role==='owner',me=p.id===ME;return `<tr${p.role==='none'?' style="background:var(--warn-soft)"':''}>
     <td><input id="pf-n-${esc(p.id)}" data-pf="${esc(p.id)}" data-k="name" value="${esc(p.name||'')}" style="min-width:140px">${p.role==='none'?'<br><span class="chip prog">بانتظار الصلاحية</span>':''}</td>
-    <td dir="ltr" style="text-align:start">${esc(p.email||'')}</td>
+    <td dir="ltr" style="text-align:start">${esc(showLogin(p.email))}</td>
     <td>${own?'<b>المالك</b>':`<select data-pf="${esc(p.id)}" data-k="role" aria-label="الدور"><option value="none"${p.role==='none'?' selected':''}>بدون صلاحية</option>${Object.entries(ROLES).map(([k,v])=>`<option value="${k}"${p.role===k?' selected':''}>${v}</option>`).join('')}</select>`}</td>
     <td><select data-pf="${esc(p.id)}" data-k="rep" aria-label="المندوب"><option value="">—</option>${repList.map(([k,v])=>`<option value="${esc(k)}"${p.rep===k?' selected':''}>${esc(v)}</option>`).join('')}</select></td>
     <td class="muted">${seen(p.created_at)}</td>
-    <td><div class="actions">${p.email?`<button type="button" class="sm" data-sendreset="${esc(p.email)}">إرسال رابط تغيير كلمة المرور</button>`:''}${own||me?'':`<button type="button" class="sm ghost del" data-rmprofile="${esc(p.id)}">إزالة</button>`}</div></td></tr>`}),'','لا يوجد مستخدمون بعد.')}</section>
+    <td><div class="actions">${!me&&!own?`<input id="np-${esc(p.id)}" type="text" placeholder="كلمة مرور مؤقتة" style="width:130px" autocomplete="off"><button type="button" class="sm" data-setpw="${esc(p.id)}">تعيين كلمة المرور</button>`:''}${own||me?'':`<button type="button" class="sm ghost del" data-rmprofile="${esc(p.id)}">إزالة</button>`}</div></td></tr>`}),'','لا يوجد مستخدمون بعد.')}</section>
   <div class="grid2"><section class="sec"><h3>مناديب دفترة</h3>${tbl('<th>المندوب</th><th>مرتبط بـ</th>',repList.map(([k,v])=>{const l=linked(k);return `<tr><td>${esc(v)}</td><td>${l?`<span class="chip ok">${esc(l.name||l.email)}</span> <span class="muted">${esc(l.role==='owner'?'المالك':ROLES[l.role]||'')}</span>`:'<span class="chip prog">لم يُربط بعد</span>'}</td></tr>`}),'','')}</section>
   <section class="sec"><h3>الأدوار</h3>${tbl('<th>الدور</th><th>ماذا يستطيع</th>',[`<tr><td><b>المالك (أنت)</b></td><td class="wrap">كل شيء، وإدارة الصلاحيات</td></tr>`,...Object.entries(ROLES).map(([k,v])=>`<tr><td><b>${v}</b></td><td class="wrap">${ROLE_DESC[k]}</td></tr>`)],'','')}</section></div>
-  <section class="sec card"><h3>كلمة المرور</h3><span class="muted" style="font-size:.85rem">كل مستخدم يختار كلمة مروره بنفسه ولا أحد يستطيع قراءتها. إذا نسيها يضغط "نسيت كلمة المرور؟" في شاشة الدخول فيصله رابط على إيميله، أو ترسله له أنت من الجدول أعلاه.</span><div><button type="button" class="sm" id="changeMyPin">تغيير كلمة مروري</button></div></section>
+  <section class="sec card"><h3>كلمة المرور</h3><span class="muted" style="font-size:.85rem">كل مستخدم يختار كلمة مروره بنفسه ولا أحد يستطيع قراءتها. إذا نسيها، اكتب له كلمة مرور مؤقتة في الجدول أعلاه واضغط "تعيين كلمة المرور"، وأبلغه بها، وهو يغيّرها بعد دخوله من زر "تغيير كلمة مروري".</span><div><button type="button" class="sm" id="changeMyPin">تغيير كلمة مروري</button></div></section>
   <section class="sec card"><h3>مهلة الخروج التلقائي</h3><div class="actions"><label for="idle" class="muted">يخرج المستخدم من التطبيق بعد عدم النشاط لمدة</label><select id="idle" style="width:auto">${[5,10,15,30,60,120,480].map(n=>`<option value="${n}"${idleMin()===n?' selected':''}>${n>=60?n/60+' ساعة':n+' دقيقة'}</option>`).join('')}</select></div></section>`;
 }
 async function saveProfile(id,patch){
@@ -893,10 +893,17 @@ let lastAct=Date.now(),LOCKED=false,AUTH='off',SIGNOUT_MSG=null;
 /* ---------- sign-in screens (Supabase email + password) ---------- */
 const ICON_IN='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M14 7l5 5-5 5"/><path d="M19 12H8"/></svg>';
 const ICON_KEY='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3"/><path d="M17 6l3 3"/><path d="M15 8l2 2"/></svg>';
+/* phone sign-in (free, no SMS): a Saudi mobile number becomes the login name, mapped to an internal address */
+const PHONE_DOMAIN='phone.zizcookies.app';
+function normPhone(v){let d=String(v||'').replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c)).replace(/\D/g,'');
+  if(d.startsWith('00'))d=d.slice(2);if(d.startsWith('05')&&d.length===10)d='966'+d.slice(1);else if(d.startsWith('5')&&d.length===9)d='966'+d;return d}
+function loginId(v){v=String(v||'').trim();if(v.includes('@'))return {email:lc(v),phone:null};const p=normPhone(v);return /^9665\d{8}$/.test(p)?{email:p+'@'+PHONE_DOMAIN,phone:p}:{email:null,phone:null}}
+const isPhoneEmail=e=>String(e||'').endsWith('@'+PHONE_DOMAIN);
+const showLogin=e=>isPhoneEmail(e)?'0'+String(e).split('@')[0].slice(3):(e||'');
 function showAuth(state,msg){
   AUTH=state;LOCKED=true;$('#lock').hidden=false;$('#main').innerHTML='';hideTip();
   const pw=(id,lbl,ac)=>`<label for="${id}" class="muted">${lbl}</label><input id="${id}" class="pin" type="password" autocomplete="${ac}" maxlength="72" required>`;
-  const em=(v)=>`<label for="au-email" class="muted">الإيميل</label><input id="au-email" type="email" autocomplete="email" required value="${esc(v||'')}">`;
+  const em=(v)=>`<label for="au-email" class="muted">رقم الجوال أو الإيميل</label><input id="au-email" type="text" inputmode="tel" autocomplete="username" placeholder="05xxxxxxxx" required value="${esc(v||'')}">`;
   const err=`<div class="pinerr" id="pinErr">${esc(msg&&msg.err||'')}</div>`;
   const lastEmail=(()=>{try{return localStorage.getItem('ziz-email')||''}catch(e){return ''}})();
   let h='';
@@ -905,12 +912,15 @@ function showAuth(state,msg){
   else if(state==='login')h=`<h2>${esc(msg&&msg.title||'تسجيل الدخول')}</h2><p class="muted">${esc(msg&&msg.text||'زيزكوكيز · نظام الإنتاج اليومي')}</p>
     <form id="fLogin">${em(lastEmail)}${pw('au-pass','كلمة المرور','current-password')}${err}<button class="pri iconbtn" type="submit" style="justify-content:center">${ICON_IN}دخول</button></form>
     <button type="button" class="sm ghost iconbtn" id="forgotPw">${ICON_KEY}نسيت كلمة المرور؟</button>
-    <p class="muted" style="font-size:.85rem;margin:0">ما عندك حساب؟ <button type="button" class="linkbtn" id="toSignup">إنشاء حساب</button></p>`;
+    <p class="muted" style="font-size:.85rem;margin:0">ما عندك حساب؟ <button type="button" class="linkbtn" id="toSignup">إنشاء حساب</button></p>
+    ${IS_STANDALONE()?'':`<button type="button" class="sm iconbtn" id="installApp2" style="margin-top:6px"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 7v7"/><path d="M9 11l3 3 3-3"/><path d="M10 18h4"/></svg>تثبيت التطبيق على جوالك</button>`}`;
   else if(state==='signup')h=`<h2>إنشاء حساب</h2><p class="muted">بعد إنشاء الحساب يحدد مدير النظام صلاحيتك.</p>
     <form id="fSignup"><label for="au-name" class="muted">الاسم</label><input id="au-name" type="text" autocomplete="name" required style="direction:rtl;text-align:start">${em('')}${pw('au-pass','كلمة المرور (6 خانات على الأقل)','new-password')}${pw('au-pass2','أعد كتابة كلمة المرور','new-password')}${err}<button class="pri" type="submit">إنشاء الحساب</button></form>
     <button type="button" class="linkbtn" id="backLogin">رجوع لتسجيل الدخول</button>`;
-  else if(state==='forgot')h=`<h2>نسيت كلمة المرور</h2><p class="muted">اكتب إيميلك ونرسل لك رابطًا لتعيين كلمة مرور جديدة.</p>
-    <form id="fForgot">${em(lastEmail)}${err}<button class="pri iconbtn" type="submit" style="justify-content:center">${ICON_KEY}إرسال الرابط</button></form>
+  else if(state==='forgot')h=`<h2>نسيت كلمة المرور</h2>
+    <p class="muted"><b>إذا تدخل برقم الجوال:</b> تواصل مع مدير النظام، وهو يعيّن لك كلمة مرور مؤقتة من تبويب الصلاحيات، وبعد ما تدخل غيّرها من زر "تغيير كلمة مروري".</p>
+    <p class="muted" style="font-size:.85rem"><b>إذا تدخل بالإيميل:</b> اكتبه هنا ونحاول نرسل لك رابطًا.</p>
+    <form id="fForgot"><label for="au-email" class="muted">الإيميل</label><input id="au-email" type="email" autocomplete="email" required value="${esc(lastEmail.includes('@')?lastEmail:'')}">${err}<button class="pri iconbtn" type="submit" style="justify-content:center">${ICON_KEY}إرسال الرابط</button></form>
     <button type="button" class="linkbtn" id="backLogin">رجوع لتسجيل الدخول</button>`;
   else if(state==='sent')h=`<h2>${esc(msg&&msg.title||'تحقق من إيميلك')}</h2><p class="muted">${esc(msg&&msg.text||'')}</p><button type="button" class="sm" id="backLogin">رجوع لتسجيل الدخول</button>`;
   else if(state==='recover'||state==='newpw')h=`<h2>كلمة مرور جديدة</h2><p class="muted">اختر كلمة مرور من 6 خانات على الأقل.</p>
@@ -925,11 +935,12 @@ async function submitAuth(id){
   const v=i=>(document.getElementById(i)||{}).value||'';
   const btn=$('#lockBody button[type=submit]');if(btn)btn.disabled=true;
   try{
-    if(id==='fLogin'){const email=lc(v('au-email'));try{localStorage.setItem('ziz-email',email)}catch(e){}
-      const {data,error}=await SB.auth.signInWithPassword({email,password:v('au-pass')});if(error){err(authErr(error));return}startData(data.session);return}
+    if(id==='fLogin'){const L=loginId(v('au-email'));if(!L.email){err('اكتب رقم جوال سعودي صحيح (05xxxxxxxx) أو إيميل');return}try{localStorage.setItem('ziz-email',v('au-email').trim())}catch(e){}
+      const {data,error}=await SB.auth.signInWithPassword({email:L.email,password:v('au-pass')});if(error){err(authErr(error).replace('الإيميل','رقم الجوال أو الإيميل'));return}startData(data.session);return}
     if(id==='fSignup'){const a=v('au-pass');if(a.length<6){err('كلمة المرور لازم تكون 6 خانات على الأقل');return}if(a!==v('au-pass2')){err('كلمتا المرور غير متطابقتين');return}
-      const email=lc(v('au-email'));const {data,error}=await SB.auth.signUp({email,password:a,options:{data:{name:v('au-name').trim()},emailRedirectTo:APP_LINK()}});
-      if(error){err(authErr(error));return}try{localStorage.setItem('ziz-email',email)}catch(e){}
+      const L=loginId(v('au-email'));if(!L.email){err('اكتب رقم جوال سعودي صحيح (05xxxxxxxx) أو إيميل');return}
+      const email=L.email;const {data,error}=await SB.auth.signUp({email,password:a,options:{data:{name:v('au-name').trim(),phone:L.phone||''},emailRedirectTo:APP_LINK()}});
+      if(error){err(authErr(error).replace('هذا الإيميل','هذا الرقم أو الإيميل'));return}try{localStorage.setItem('ziz-email',v('au-email').trim())}catch(e){}
       if(data.session){startData(data.session);return}
       showAuth('sent',{title:'تم إنشاء الحساب',text:'أرسلنا لك رسالة تأكيد على إيميلك. اضغط الرابط اللي فيها، ثم ارجع وسجّل الدخول.'});return}
     if(id==='fForgot'){const email=lc(v('au-email'));const {error}=await SB.auth.resetPasswordForEmail(email,{redirectTo:APP_LINK()});if(error){err(authErr(error));return}
@@ -946,14 +957,28 @@ async function lockNow(byUser){
   await SB.auth.signOut();
 }
 setInterval(()=>{if(LOCKED||mode!=='cloud')return;if(Date.now()-lastAct>idleMin()*60e3)lockNow(false)},20000);
-function personName(id){const p=PROFILES.find(x=>x.id===id);return p?(p.name||p.email||'مستخدم'):'مستخدم'}
+function personName(id){const p=PROFILES.find(x=>x.id===id);return p?(p.name||showLogin(p.email)||'مستخدم'):'مستخدم'}
 function paintAcct(){
   const n=PROFILES.filter(p=>p.role==='none').length,bd=$('#reqBadge');if(bd){bd.hidden=!(n&&myRole()==='owner');bd.textContent=n}
   const pl=$('#permLink');if(pl)pl.hidden=myRole()!=='owner';
   if(mode!=='cloud'||!ME){$('#acct').hidden=true;return}const R=myRole();$('#acct').hidden=false;$('#acctName').textContent=personName(ME);$('#acctRole').textContent=R==='owner'?'المالك':R==='none'?'بانتظار الصلاحية':ROLES[R]}
 /* install prompt (Android / desktop Chrome) */
 let INSTALL_EVT=null;
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INSTALL_EVT=e;const b=$('#installApp');if(b)b.hidden=false});
+const IS_STANDALONE=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const IS_IOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+/* the install button stays visible until the app runs installed */
+(function(){const b=document.getElementById('installApp');if(b&&!IS_STANDALONE())b.hidden=false})();
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INSTALL_EVT=e;const b=$('#installApp');if(b&&!IS_STANDALONE())b.hidden=false});
+function installHelp(){
+  const ios=`<ol style="text-align:start;line-height:2;margin:0;padding-inline-start:20px"><li>افتح الرابط في متصفح <b>Safari</b></li><li>اضغط زر <b>المشاركة</b> <span style="display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px">⬆️</span> أسفل الشاشة</li><li>اختر <b>"إضافة إلى الشاشة الرئيسية"</b></li><li>اضغط <b>إضافة</b></li></ol>`;
+  const andr=`<ol style="text-align:start;line-height:2;margin:0;padding-inline-start:20px"><li>افتح الرابط في متصفح <b>Chrome</b></li><li>اضغط <b>⋮</b> أعلى الشاشة</li><li>اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b></li></ol>`;
+  const d=document.createElement('div');d.id='installHelp';
+  d.innerHTML=`<div class="lockbox card" style="max-width:420px"><img src="icon-192.png" alt="" width="72" height="72" style="border-radius:18px"><h2>تثبيت تطبيق زيزكوكيز</h2>
+    ${IS_IOS?ios:`<b>أندرويد</b>${andr}<b style="margin-top:8px">آيفون</b>${ios}`}
+    <p class="muted" style="font-size:.85rem">بعدها تطلع أيقونة زيزكوكيز على شاشة جوالك وتفتح كتطبيق.</p><button type="button" class="pri" id="closeInstallHelp">تم</button></div>`;
+  d.style.cssText='position:fixed;inset:0;z-index:60;background:color-mix(in srgb,var(--ink) 45%,transparent);display:grid;place-items:center;padding:16px';
+  document.body.appendChild(d);
+}
 window.addEventListener('appinstalled',()=>{const b=$('#installApp');if(b)b.hidden=true;toast('تم تثبيت التطبيق')});
 const filt=a=>sortByName(a.filter(x=>draft.itemFilter==='active'?!x.inactive:draft.itemFilter==='inactive'?!!x.inactive:true)).sort((a,b)=>(a.inactive?1:0)-(b.inactive?1:0));
 const stateCell=(col,x)=>`<div class="actions"><span class="chip ${x.inactive?'low':'ok'}">${x.inactive?'معطل':'نشط'}</span><button type="button" class="sm ghost wr" data-toggle="${col}" data-id="${esc(x.id)}">${x.inactive?'تفعيل':'تعطيل'}</button></div>`;
@@ -1112,7 +1137,9 @@ document.addEventListener('click',async e=>{
     if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الحذف';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='حذف'}},3500);return}
     await del(b.dataset.del,b.dataset.id); toast('تم الحذف'); return;
   }
-  if(b.dataset.sendreset){const {error}=await SB.auth.resetPasswordForEmail(b.dataset.sendreset,{redirectTo:APP_LINK()});toast(error?'تعذر إرسال الرابط':'أُرسل رابط تغيير كلمة المرور إلى '+b.dataset.sendreset);return}
+  if(b.dataset.setpw){const id=b.dataset.setpw,inp=document.getElementById('np-'+id),pw=inp?inp.value:'';if(pw.length<6){toast('كلمة المرور المؤقتة لازم تكون 6 خانات على الأقل');return}
+    b.disabled=true;const {error}=await SB.rpc('owner_set_password',{target:id,pw});b.disabled=false;
+    if(error){toast('تعذر تعيين كلمة المرور');return}inp.value='';toast('تم تعيين كلمة المرور المؤقتة. أبلغ المستخدم بها، ويغيّرها بعد دخوله');return}
   if(b.dataset.rmprofile){if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الإزالة';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='إزالة'}},3500);return}const {error}=await SB.from('profiles').delete().eq('id',b.dataset.rmprofile);if(error){toast('تعذرت الإزالة');return}await loadProfiles();render();toast('أُزيل المستخدم');return}
   if(b.id==='copyLink'){try{await navigator.clipboard.writeText(APP_LINK());toast('تم نسخ الرابط')}catch(e){toast(APP_LINK())}return}
   if(b.id==='changeMyPin'){showAuth('newpw');return}
@@ -1120,7 +1147,8 @@ document.addEventListener('click',async e=>{
   if(b.id==='backLogin'){showAuth('login');return}
   if(b.id==='toSignup'){showAuth('signup');return}
   if(b.id==='forgotPw'){showAuth('forgot');return}
-  if(b.id==='installApp'){if(INSTALL_EVT){INSTALL_EVT.prompt();INSTALL_EVT=null;b.hidden=true}return}
+  if(b.id==='installApp'||b.id==='installApp2'){if(INSTALL_EVT){INSTALL_EVT.prompt();INSTALL_EVT.userChoice.then(c=>{if(c&&c.outcome==='accepted')b.hidden=true}).catch(()=>{});INSTALL_EVT=null}else installHelp();return}
+  if(b.id==='closeInstallHelp'){const d=document.getElementById('installHelp');if(d)d.remove();return}
   if(b.id==='logout'){lockNow(true);return}
   if(b.id==='dlOrders'){downloadOrders();return}
   if(b.id==='dlOrdersPdf'){b.disabled=true;const t0=b.textContent;b.textContent='جارٍ تجهيز الملف…';downloadOrdersPdf().finally(()=>{b.disabled=false;b.textContent=t0});return}
