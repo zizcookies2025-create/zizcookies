@@ -302,8 +302,8 @@ function daftraKeySection(){
     <p class="muted" style="margin:0">الصق مفتاح دفترة هنا واضغط حفظ. ينحفظ مخفي، ما يظهر لأي أحد، ويستخدمه النظام بس لسحب المبيعات والتعديلات من دفترة كل 10 دقائق.</p>
     <form id="fDaftraKey" class="actions" style="flex-wrap:wrap"><input id="dk-val" type="password" autocomplete="off" placeholder="الصق مفتاح دفترة هنا" style="flex:1;min-width:240px;direction:ltr" aria-label="مفتاح دفترة">
       <button type="submit" class="pri">حفظ والربط الآن</button></form></section>`}
-async function saveDaftraKey(){const el=document.getElementById('dk-val'),k=(el&&el.value||'').trim();
-  if(k.length<20){toast('الصق مفتاح دفترة كامل');return}
+async function saveDaftraKey(){const el=document.getElementById('dk-val'),raw=(el&&el.value||'').trim(),mm=raw.match(/[0-9a-f]{40}/i),k=mm?mm[0]:'';
+  if(!k){toast('هذا مو مفتاح دفترة. المفتاح رقم طويل من 40 حرف يبدأ مثل 188dbecb… انسخه من صفحة API Keys في دفترة');return}
   const {error}=await SB.rpc('owner_set_daftra_key',{k});if(el)el.value='';
   if(error){toast('تعذر حفظ المفتاح');return}
   DAFTRA_KEY_AT=new Date().toISOString();toast('تم حفظ المفتاح. جارٍ السحب من دفترة…');render();
