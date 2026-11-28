@@ -885,8 +885,7 @@ function calcPanel(){
       <button type="button" class="sm" id="calcLoad">فتح في الحاسبة</button></div></div>
     <span class="muted" style="font-size:.85rem">حوّلها ${esc(personName(c.transferredBy))} · ${when(c.transferredAt)}${appr?` · اعتمدها <b>${esc(personName(c.approvedBy))}</b> · ${when(c.approvedAt)}`:''}${c.excluded?` · ${fmt(c.excluded)} طلب متأخر غير معتمد لم يدخل`:''}</span>
     ${miss.length?`<div class="note">أصناف بلا تركيبة لم تدخل في حساب المواد: ${esc(miss.join('، '))}</div>`:''}
-    <div class="kpis"><div class="kpi"><span class="lb">${ic('orders')}إجمالي الطلب</span><span class="v">${fmt(totQ)}</span><span class="s">${fmt((c.lines||[]).length)} صنف</span></div>
-      <div class="kpi"><span class="lb">${ic('orders')}الحبات</span><span class="v">${fmt(pcs)}</span><span class="s">بعد تفكيك البوكسات</span></div>
+    <div class="kpis"><div class="kpi"><span class="lb">${ic('orders')}الحبات</span><span class="v">${fmt(pcs)}</span><span class="s">بعد تفكيك البوكسات</span></div>
       ${ck?'':`<div class="kpi"><span class="lb">${ic('orders')}الصواني</span><span class="v">${fmt(trays)}</span><span class="s">${fmt(snap.tray)} حبة للصينية</span></div>
       <div class="kpi"><span class="lb">${ic('issue')}وزن المواد</span><span class="v">${kg(totG)} كجم</span></div>`}</div>
     ${ck}
