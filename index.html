@@ -742,10 +742,12 @@ function calcCompute(lines){
 const kg=g=>fmt(+(g/1000).toFixed(3));
 /* ---------- cookie types: every classic / chocolate piece uses the shop recipe (grams for a 50 g piece, scaled by the piece size in its name) ---------- */
 const CK_TYPES={classic:'كلاسيك',choc:'شوكلت'};
-const CK_ING=[['d','العجين'],['g','الجالكسي'],['h','الهرشي']];
-const CK_PACK={g:{w:720,n:'علبة'},h:{w:1000,n:'كيس'},d:null};
-function ckRecipe(){const s=S.meta.find(x=>x.id==='settings')||{},r=s.recipe||{},def={h:13,d:33,g:6};
-  return {classic:{...def,...(r.classic||{})},choc:{...def,...(r.choc||{})}}}
+/* classic pieces use the classic dough, chocolate pieces their own chocolate dough */
+const CK_ING=[['d','عجين الكلاسيك'],['c','عجين الشوكلت'],['g','الجالكسي'],['h','الهرشي']];
+const CK_PACK={g:{w:720,n:'علبة'},h:{w:1000,n:'كيس'},d:null,c:null};
+function ckRecipe(){const s=S.meta.find(x=>x.id==='settings')||{},r=s.recipe||{};
+  const rc={...(r.choc||{})};if(rc.c==null&&rc.d!=null){rc.c=rc.d;rc.d=0} /* recipes saved before chocolate dough existed */
+  return {classic:{h:13,d:33,c:0,g:6,...(r.classic||{})},choc:{h:13,d:0,c:33,g:6,...rc}}}
 function pieceType(p){const n=String(p&&p.name||'');if(/عرض|بوكس|بايتس/.test(n))return null;
   if(/شوك|shukilit|choc/i.test(n))return 'choc';if(/كلاسي|kilasik|classic/i.test(n))return 'classic';return null}
 const pieceSize=p=>{const m=String(p&&p.name||'').match(/(\d+(?:\.\d+)?)\s*(?:جرام|جم|غرام|jiram|g\b)/i);return m?num(m[1]):50};
@@ -754,7 +756,7 @@ function cookieSummary(lines){const T=traySize(),R=ckRecipe(),t={classic:{q:0,f:
   lines.forEach(l=>{const p=byId('products',l.p),q=num(l.q);if(!p||q<=0)return;
     const cont=(p.contents||[]).filter(c=>c.p&&num(c.n)>0),parts=cont.length?cont.map(c=>[byId('products',c.p),q*num(c.n)]):[[p,q]];
     parts.forEach(([bp,n])=>{const k=pieceType(bp);if(!k||!n)return;const sz=pieceSize(bp);t[k].q+=n;t[k].f+=n*sz/50;t[k].sizes[sz]=(t[k].sizes[sz]||0)+n})});
-  const ing={d:0,g:0,h:0};Object.keys(t).forEach(k=>{t[k].trays=Math.ceil(t[k].q/T-1e-9);CK_ING.forEach(([i])=>{const g=t[k].f*num(R[k][i]);t[k][i]=g;ing[i]+=g})});
+  const ing={d:0,c:0,g:0,h:0};Object.keys(t).forEach(k=>{t[k].trays=Math.ceil(t[k].q/T-1e-9);CK_ING.forEach(([i])=>{const g=t[k].f*num(R[k][i]);t[k][i]=g;ing[i]+=g})});
   return {t,ing,T,R,pieces:t.classic.q+t.choc.q,trays:t.classic.trays+t.choc.trays}}
 function cookieBlock(lines,editable){const C=cookieSummary(lines);if(!C.pieces)return '';
   const sizes=k=>{const e=Object.entries(C.t[k].sizes);return e.length>1||(e[0]&&+e[0][0]!==50)?e.map(([s,n])=>`${fmt(n)} × ${fmt(s)}جم`).join(' · '):''};
@@ -874,6 +876,7 @@ function calcPanel(){
   const G={};(c.detail||[]).forEach(d=>{(G[d.repName]=G[d.repName]||[]).push(d)});
   const isBox=id=>{const p=byId('products',id);return p&&(p.contents||[]).length};
   const miss=(snap.missing||[]).filter(n=>!pieceType(S.products.find(x=>x.name===n)||{name:n})),ck=cookieBlock(c.lines||[],false);
+  const canEdit=!appr&&canDo('approve');
   return `<section class="sec card" style="gap:14px;border:2px solid ${appr?'var(--good)':'var(--warn)'}">
     <div class="sechead"><h2>حسبة الإنتاج · ${esc(dayLabel(day))}</h2>
       <div class="actions"><span class="chip ${appr?'done':'prog'}">${appr?'معتمدة':'بانتظار الاعتماد'}</span>
@@ -888,11 +891,12 @@ function calcPanel(){
       <div class="kpi"><span class="lb">${ic('issue')}وزن المواد</span><span class="v">${kg(totG)} كجم</span></div>`}</div>
     ${ck}
     <h3>الإجمالي</h3>
-    ${tbl('<th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th>',(c.lines||[]).map(l=>`<tr><td>${esc(pName(l.p))}</td><td class="n"><b>${fmt(l.q)}</b></td><td>${isBox(l.p)?'بوكس':'حبة'}</td></tr>`),`<td>الإجمالي</td><td class="n">${fmt(totQ)}</td><td></td>`,'')}
+    ${tbl('<th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th>'+(canEdit?'<th></th>':''),(c.lines||[]).map(l=>`<tr><td>${esc(pName(l.p))}</td><td class="n"><b>${fmt(l.q)}</b></td><td>${isBox(l.p)?'بوكس':'حبة'}</td>${canEdit?`<td><button type="button" class="sm ghost" data-rmcl="${esc(l.p)}">إزالة الصنف</button></td>`:''}</tr>`),`<td>الإجمالي</td><td class="n">${fmt(totQ)}</td><td></td>${canEdit?'<td></td>':''}`,'')}
     <div class="grid2"><section class="sec"><h3>الحبات والصواني</h3>${tbl('<th>نوع الحبة</th><th class="n">الحبات</th><th class="n">الصواني</th><th class="n">الوزن كجم</th>',snap.prods.map(x=>`<tr><td>${esc(pName(x.p))}</td><td class="n">${fmt(x.q)}</td><td class="n"><b>${fmt(x.trays)}</b></td><td class="n">${kg(x.g)}</td></tr>`),snap.prods.length?`<td>الإجمالي</td><td class="n">${fmt(pcs)}</td><td class="n">${fmt(trays)}</td><td class="n">${kg(totG)}</td>`:'','')}</section>
     <section class="sec"><h3>المواد المطلوبة</h3>${tbl('<th>المادة</th><th class="n">كجم</th><th class="n">العبوات</th>',snap.mats.map(m=>{const M=byId('materials',m.m),pk=M&&num(M.pack);return `<tr><td>${esc(mName(m.m))}</td><td class="n">${kg(m.g)}</td><td class="n">${pk?`<b>${fmt(Math.ceil(m.g/pk-1e-9))}</b> ${esc(M.packName||'عبوة')}`:'—'}</td></tr>`}),'','أضف تركيبة الحبات بالجرام لحساب المواد.')}</section></div>
     <h3>التفصيل حسب المندوب</h3>
-    ${tbl('<th>المندوب</th><th>الصنف</th><th class="n">الكمية</th><th>الملاحظات</th><th>وقت الطلب</th>',Object.entries(G).flatMap(([rep,list])=>[...list.map((d,j)=>`<tr>${j?'':`<td rowspan="${list.length+1}" style="vertical-align:top"><b>${esc(rep)}</b><br><span class="muted">${fmt(list.length)} طلب</span></td>`}<td>${esc(pName(d.p))}</td><td class="n">${fmt(d.q)}</td><td class="wrap">${d.note?esc(d.note):'<span class="muted">—</span>'}</td><td class="muted">${d.t?timeOf(d.t):''}${d.late?' <span class="chip new">متأخر معتمد</span>':''}</td></tr>`),`<tr><td class="muted">إجمالي المندوب</td><td class="n"><b>${fmt(list.reduce((a,d)=>a+d.q,0))}</b></td><td colspan="2"></td></tr>`]),'','')}
+    ${tbl('<th>المندوب</th><th>الصنف</th><th class="n">الكمية</th><th>الملاحظات</th><th>وقت الطلب</th>'+(canEdit?'<th></th>':''),Object.entries(G).flatMap(([rep,list])=>[...list.map((d,j)=>`<tr>${j?'':`<td rowspan="${list.length+1}" style="vertical-align:top"><b>${esc(rep)}</b><br><span class="muted">${fmt(list.length)} طلب</span></td>`}<td>${esc(pName(d.p))}</td><td class="n">${fmt(d.q)}</td><td class="wrap">${d.note?esc(d.note):'<span class="muted">—</span>'}</td><td class="muted">${d.t?timeOf(d.t):''}${d.late?' <span class="chip new">متأخر معتمد</span>':''}</td>${canEdit?`<td><button type="button" class="sm ghost" data-rmcd="${(c.detail||[]).indexOf(d)}">إزالة الطلب</button></td>`:''}</tr>`),`<tr><td class="muted">إجمالي المندوب</td><td class="n"><b>${fmt(list.reduce((a,d)=>a+d.q,0))}</b></td><td colspan="${canEdit?3:2}"></td></tr>`]),'','')}
+    ${canEdit?'<span class="muted" style="font-size:.82rem">"إزالة الطلب" تشيل الطلب من الحسبة بس، والطلب الأصلي يبقى في تبويب الطلبات اليومية.</span>':''}
   </section>`;
 }
 function vCalc(){
@@ -1377,6 +1381,13 @@ document.addEventListener('click',async e=>{
   if(b.id==='saveTargets'){b.disabled=true;await saveTargets();b.disabled=false;return}
   if(b.id==='toCalc'){b.disabled=true;await transferToCalc();b.disabled=false;return}
   if(b.id==='approveCalc'){if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='تأكيد الاعتماد';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent='اعتماد الحسبة'}},4000);return}b.disabled=true;await approveCalc();return}
+  if(b.dataset.rmcl!==undefined||b.dataset.rmcd!==undefined){
+    const c=calcDoc(day);if(!c||c.status==='approved'){toast('الحسبة معتمدة ولا يمكن تعديلها');return}
+    if(!b.classList.contains('armed')){const t0=b.textContent;b.classList.add('armed');b.textContent='تأكيد الإزالة';setTimeout(()=>{if(b.isConnected){b.classList.remove('armed');b.textContent=t0}},3500);return}
+    let lines=(c.lines||[]).map(l=>({...l})),detail=[...(c.detail||[])],what='';
+    if(b.dataset.rmcl!==undefined){const p=b.dataset.rmcl;lines=lines.filter(l=>l.p!==p);detail=detail.filter(d=>d.p!==p);what='تمت إزالة '+pName(p)+' من الحسبة'}
+    else{const i=+b.dataset.rmcd,d=detail[i];if(!d)return;detail.splice(i,1);const l=lines.find(x=>x.p===d.p);if(l){l.q=+(num(l.q)-num(d.q)).toFixed(3);if(l.q<=0)lines=lines.filter(x=>x!==l)}what='تمت إزالة طلب '+(d.repName||'')+' ('+pName(d.p)+' × '+fmt(d.q)+') من الحسبة'}
+    if(await put('calcs',{...c,lines,detail,editedBy:ME,editedAt:Date.now()}))toast(what);return}
   if(b.id==='calcLoad'){const c=calcDoc(day);if(!c)return;draft.calc=c.lines.map(l=>({p:l.p,q:String(l.q)}));reindex('cl');render();setTimeout(()=>{const el=document.getElementById('cl-p-0');if(el)el.scrollIntoView({block:'center'})},50);return}
   if(b.id==='calcToIssue'){const c=calcDoc(day);if(!c)return;draft.issueProds=c.lines.map(l=>({p:l.p,q:String(l.q)}));reindex('ip');issueFromProds();view='issues';history.replaceState(null,'','#issues');render();window.scrollTo({top:0});toast('تم تحميل الحسبة في إذن الصرف');return}
   if(b.id==='calcClear'){draft.calc=[{p:'',q:''}];reindex('cl');render();return}
