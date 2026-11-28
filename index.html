@@ -292,7 +292,22 @@ async function loadAll(){
 }
 let INVITES=[];
 async function loadProfiles(){const {data,error}=await SB.from('profiles').select('*').order('created_at');if(!error){PROFILES=data||[];MYPROFILE=PROFILES.find(p=>p.id===ME)||MYPROFILE}
-  if(MYPROFILE&&MYPROFILE.role==='owner'){const r=await SB.from('invites').select('*').order('created_at');if(!r.error)INVITES=r.data||[]}}
+  if(MYPROFILE&&MYPROFILE.role==='owner'){const r=await SB.from('invites').select('*').order('created_at');if(!r.error)INVITES=r.data||[];
+    const k=await SB.rpc('daftra_key_status');DAFTRA_KEY_AT=k.error?null:(k.data||null)}}
+let DAFTRA_KEY_AT=null;
+/* the Daftra API key is written once by the owner and never read back to the browser; only the sync function reads it */
+function daftraKeySection(){
+  return `<section class="sec card" style="gap:10px;border:2px solid ${DAFTRA_KEY_AT?'var(--good)':'var(--warn)'}"><div class="sechead"><h3>🔗 الربط مع دفترة</h3>
+    <span class="chip ${DAFTRA_KEY_AT?'done':'prog'}">${DAFTRA_KEY_AT?'متصل · حُفظ المفتاح '+new Date(DAFTRA_KEY_AT).toLocaleDateString('ar',{day:'numeric',month:'short'}):'غير متصل'}</span></div>
+    <p class="muted" style="margin:0">الصق مفتاح دفترة هنا واضغط حفظ. ينحفظ مخفي، ما يظهر لأي أحد، ويستخدمه النظام بس لسحب المبيعات والتعديلات من دفترة كل 10 دقائق.</p>
+    <form id="fDaftraKey" class="actions" style="flex-wrap:wrap"><input id="dk-val" type="password" autocomplete="off" placeholder="الصق مفتاح دفترة هنا" style="flex:1;min-width:240px;direction:ltr" aria-label="مفتاح دفترة">
+      <button type="submit" class="pri">حفظ والربط الآن</button></form></section>`}
+async function saveDaftraKey(){const el=document.getElementById('dk-val'),k=(el&&el.value||'').trim();
+  if(k.length<20){toast('الصق مفتاح دفترة كامل');return}
+  const {error}=await SB.rpc('owner_set_daftra_key',{k});if(el)el.value='';
+  if(error){toast('تعذر حفظ المفتاح');return}
+  DAFTRA_KEY_AT=new Date().toISOString();toast('تم حفظ المفتاح. جارٍ السحب من دفترة…');render();
+  const b=document.getElementById('syncDaftra')||document.createElement('button');await syncDaftra(b)}
 /* every edit or delete of saved data needs a reason; the general manager (owner) approves or rejects it before it takes effect.
    opts.flow marks routine workflow steps (order status, late-order approval) that are not edits of the record itself */
 const REVIEW_COLS=['orders','issues','products','materials','targets','sales','returns','collections'];
@@ -324,8 +339,8 @@ async function rawDel(col,id){
   applyRow({col,id},true);render();return true;
 }
 /* ---------- change approvals ---------- */
-const COL_LABEL={clients:'العملاء',orders:'الطلبات',issues:'صرف المواد',products:'الأصناف',materials:'المواد',targets:'الأهداف',sales:'المبيعات',returns:'المرتجعات',collections:'التحصيلات'};
-const FIELD_LABEL={name:'الاسم',qty:'الكمية',productId:'الصنف',user:'المندوب',note:'الملاحظات',status:'الحالة',date:'التاريخ',price:'السعر',unit:'الوحدة',opening:'الرصيد',min:'الحد الأدنى',pack:'وزن العبوة',packName:'اسم العبوة',kind:'النوع',bom:'التركيبة',contents:'محتوى البوكس',lines:'البنود',prods:'الأصناف',receiver:'المستلم',inactive:'معطّل',sales:'أهداف المبيعات',coll:'أهداف التحصيل',client:'العميل',amount:'المبلغ',method:'طريقة الدفع',invoice:'الفاتورة',reason:'السبب',approval:'الموافقة',window:'وقت الطلب',vatIncl:'السعر شامل الضريبة',c:'العميل',d:'التاريخ',u:'المندوب',l:'الأصناف',gl:'الإجمالي شامل الضريبة',tot:'إجمالي الفاتورة',no:'الرقم',a:'المبلغ',m:'طريقة الدفع',inv:'الفاتورة',n:'ملاحظات',r:'نوع المرتجع',phone:'الجوال',tax:'الرقم الضريبي',addr:'العنوان',city:'المدينة',active:'الحالة'};
+const COL_LABEL={clients:'العملاء',expenses:'المصروفات',incomes:'سندات القبض',purchase_invoices:'فواتير الشراء',purchase_refunds:'مرتجعات المشتريات',requisitions:'الأذون المخزنية',orders:'الطلبات',issues:'صرف المواد',products:'الأصناف',materials:'المواد',targets:'الأهداف',sales:'المبيعات',returns:'المرتجعات',collections:'التحصيلات'};
+const FIELD_LABEL={name:'الاسم',qty:'الكمية',productId:'الصنف',user:'المندوب',note:'الملاحظات',status:'الحالة',date:'التاريخ',price:'السعر',unit:'الوحدة',opening:'الرصيد',min:'الحد الأدنى',pack:'وزن العبوة',packName:'اسم العبوة',kind:'النوع',bom:'التركيبة',contents:'محتوى البوكس',lines:'البنود',prods:'الأصناف',receiver:'المستلم',inactive:'معطّل',sales:'أهداف المبيعات',coll:'أهداف التحصيل',client:'العميل',amount:'المبلغ',method:'طريقة الدفع',invoice:'الفاتورة',reason:'السبب',approval:'الموافقة',window:'وقت الطلب',vatIncl:'السعر شامل الضريبة',c:'العميل',d:'التاريخ',u:'المندوب',l:'الأصناف',gl:'الإجمالي شامل الضريبة',tot:'إجمالي الفاتورة',no:'الرقم',a:'المبلغ',m:'طريقة الدفع',inv:'الفاتورة',n:'ملاحظات',r:'نوع المرتجع',phone:'الجوال',tax:'الرقم الضريبي',addr:'العنوان',city:'المدينة',active:'الحالة',amount:'المبلغ',total:'الإجمالي',summary_total:'الإجمالي',category:'التصنيف',vendor:'الجهة',supplier_business_name:'المورد',note:'الوصف',notes:'ملاحظات',description:'الوصف',draft:'مسودة',code:'الكود',type:'النوع',store_id:'المستودع'};
 const SKIP_F=['id','_by','updatedAt','createdAt','createdBy','approvedBy','approvedAt'];
 function itemLabel(col,x){if(!x)return '';
   if(col==='products'||col==='materials')return x.name||'';
@@ -410,7 +425,7 @@ function vChanges(){
     <div class="kpi" style="--c:var(--bad)"><span class="lb">مرفوض</span><span class="v">${fmt(list.filter(c=>c.status==='rejected').length)}</span></div></div>
   <section class="sec"><h3>بانتظار الاعتماد</h3>${pend.length?pend.map(card).join(''):'<p class="muted">لا توجد طلبات معلقة.</p>'}</section>
   <section class="sec"><h3>السجل</h3>${done.length?done.map(card).join(''):'<p class="muted">لا يوجد سجل بعد.</p>'}</section>
-  <div class="note info"><b>تعديلات دفترة:</b> أي فاتورة أو مرتجع أو دفعة أو عميل أو صنف يتعدل أو تنحذف في دفترة تطلع هنا تلقائيًا مع قبل وبعد، والمندوب يكتب السبب، والمدير العام يعتمد أو يرفض. الرفض يعني لازم تتصحّح في دفترة، لأن التطبيق ما يغيّر في دفترة. ولمنع التعديل من الأساس: دفترة ← الإعدادات ← الأدوار والصلاحيات، وشِل صلاحية التعديل والحذف عن الموظفين.</div>`;
+  <div class="note info"><b>تعديلات دفترة:</b> أي معاملة (فواتير، مرتجعات، دفعات، مصروفات، سندات قبض، مشتريات، أذون مخزنية) أو عميل أو صنف يتعدل أو تنحذف في دفترة تطلع هنا تلقائيًا مع قبل وبعد، والمندوب يكتب السبب، والمدير العام يعتمد أو يرفض. الرفض يعني لازم تتصحّح في دفترة، لأن التطبيق ما يغيّر في دفترة. ولمنع التعديل من الأساس: دفترة ← الإعدادات ← الأدوار والصلاحيات، وشِل صلاحية التعديل والحذف عن الموظفين.</div>`;
 }
 function handleErr(e){
   if(e&&(e.code==='42501'||/row-level security/i.test(e.message||''))){toast('صلاحيتك لا تسمح بهذا التعديل');return}
@@ -1009,6 +1024,7 @@ function vUsers(){
   <div class="note info">لإضافة مستخدم: سجّل رقم جواله وصلاحيته في القائمة تحت، ثم أرسل له رابط التطبيق، فيكتب رقم جواله ويختار كلمة مرور ويضغط "دخول"، ويُنشأ حسابه بصلاحيته تلقائيًا. يظهر هنا مظللًا بدون صلاحية، فتختار دوره والمندوب المرتبط به، ويتفعّل حسابه فورًا.
   <div class="actions" style="margin-top:8px"><code dir="ltr" style="background:var(--surface);padding:4px 8px;border-radius:6px;user-select:all">${esc(APP_LINK())}</code><button type="button" class="sm" id="copyLink">نسخ الرابط</button></div></div>
   ${pending?`<div class="note">${fmt(pending)} مستخدم بانتظار تحديد الصلاحية.</div>`:''}
+  ${daftraKeySection()}
   ${invitesSection(repList)}
   <section class="sec"><div class="sechead"><h3>المستخدمون المسجلون</h3><span class="sub">${fmt(P.length)} مستخدم</span></div>
   ${tbl('<th>الاسم</th><th>رقم الجوال / الإيميل</th><th>الدور</th><th>المندوب في دفترة</th><th>تاريخ التسجيل</th><th></th>',P.map(p=>{const own=p.role==='owner',me=p.id===ME;return `<tr${p.role==='none'?' style="background:var(--warn-soft)"':''}>
@@ -1240,6 +1256,7 @@ document.addEventListener('submit',async e=>{
   e.preventDefault(); const f=e.target.id;
   if(['fLogin','fSignup','fForgot','fNewPw'].includes(f)){submitAuth(f);return}
   if(f==='fInvite'){saveInvite();return}
+  if(f==='fDaftraKey'){saveDaftraKey();return}
   if(f==='fOrder'){
     const p=val('o-p'),q=num(val('o-q')); if(!p||q<=0){toast('اختر الصنف وأدخل كمية أكبر من صفر');return}
     if(!val('o-c')){toast('اختر المندوب صاحب الطلب');return}
